@@ -38,10 +38,13 @@ struct Opt {
     )]
     output_type: OutputType,
 
+    #[clap(short, long, default_value ="summary")]
+    summary_file_name: String,
+
     #[clap(short, long, default_value = "en-US")]
     language_code: String,
 
-    #[clap(short, long, default_value = "n")]
+    #[clap(short, long, default_value = "Y")]
     delete_s3_object: String,
 }
 
@@ -70,6 +73,7 @@ async fn main() -> Result<()> {
     let Opt {
         input_audio_file,
         output_type,
+        summary_file_name,
         language_code,
         delete_s3_object,
     } = Opt::parse();
@@ -142,6 +146,13 @@ async fn main() -> Result<()> {
         .to_string_lossy()
         .into_owned();
 
+    println!();
+    spinner.update(
+        spinners::Dots7,
+        format!("Audio File {}", file_name),
+        None,
+    );
+
     let absolute_path = shellexpand::tilde(file_path.to_str().unwrap()).to_string();
     let absolute_path = Path::new(&absolute_path);
 
@@ -184,16 +195,18 @@ async fn main() -> Result<()> {
 
     match output_type {
         OutputType::Word => {
-            let output_file_path_word = Path::new("summary.docx");
+            let ext: &str = ".docx";
+            let outfile = summary_file_name + ext;
+            let output_file_path_word = Path::new(&outfile);
             let file = File::create(output_file_path_word)
                 .map_err(|e| anyhow::anyhow!("Error creating file: {}", e))?;
 
             // Creating a new document and adding paragraphs
             let doc = Docx::new()
                 .add_paragraph(Paragraph::new().add_run(Run::new().add_text(&summarized_text)))
-                .add_paragraph(Paragraph::new().add_run(Run::new().add_text("\n\n")))
-                .add_paragraph(Paragraph::new().add_run(Run::new().add_text("Transcription:\n")))
-                .add_paragraph(Paragraph::new().add_run(Run::new().add_text(&transcription)));
+                .add_paragraph(Paragraph::new().add_run(Run::new().add_text("\n\n")));
+            //    .add_paragraph(Paragraph::new().add_run(Run::new().add_text("Transcription:\n")))
+            //    .add_paragraph(Paragraph::new().add_run(Run::new().add_text(&transcription)));
 
             // Building and saving the document
             doc.build()
@@ -202,25 +215,29 @@ async fn main() -> Result<()> {
 
             spinner.success("Done!");
             println!(
-                "💾 Summary and transcription written to {}",
+            //    "💾 Summary and transcription written to {}",
+                "💾 Summary written to {}",
                 output_file_path_word.display()
             );
         }
         OutputType::Text => {
-            let output_file_path_txt = Path::new("summary.txt");
+            let ext: &str = ".txt";
+            let outfile = summary_file_name + ext;
+            let output_file_path_txt = Path::new(&outfile);
             let mut file = File::create(output_file_path_txt)
                 .map_err(|e| anyhow::anyhow!("Error creating file: {}", e))?;
 
             file.write_all(summarized_text.as_bytes())
                 .map_err(|e| anyhow::anyhow!("Error creating file: {}", e))?;
-            file.write_all(b"\n\nTranscription:\n")
-                .map_err(|e| anyhow::anyhow!("Error creating file: {}", e))?;
-            file.write_all(transcription.as_bytes())
-                .map_err(|e| anyhow::anyhow!("Error creating file: {}", e))?;
+            //file.write_all(b"\n\nTranscription:\n")
+            //    .map_err(|e| anyhow::anyhow!("Error creating file: {}", e))?;
+            //file.write_all(transcription.as_bytes())
+            //    .map_err(|e| anyhow::anyhow!("Error creating file: {}", e))?;
 
             spinner.success("Done!");
             println!(
-                "💾 Summary and transcription written to {}",
+            //    "💾 Summary and transcription written to {}",
+                "💾 Summary written to {}",
                 output_file_path_txt.display()
             );
         }
@@ -228,24 +245,28 @@ async fn main() -> Result<()> {
             spinner.success("Done!");
             println!();
             println!("Summary:\n{}\n", summarized_text);
-            println!("Transcription:\n{}\n", transcription);
+            //println!("Transcription:\n{}\n", transcription);
         }
         OutputType::Markdown => {
-            let output_file_path_md = Path::new("summary.md");
+            let ext: &str = ".md";
+            let outfile = summary_file_name + ext;
+            let output_file_path_md = Path::new(&outfile);
             let mut file = File::create(output_file_path_md)
                 .map_err(|e| anyhow::anyhow!("Error creating file: {}", e))?;
 
             let summary_md = format!("# Summary\n\n{}", summarized_text);
-            let mut transcription_md = format!("\n\n# Transcription\n\n{}", transcription);
-            transcription_md = transcription_md.replace("spk_", "\nspk_");
-            let markdown_content = format!("{}{}", summary_md, transcription_md);
+            //let mut transcription_md = format!("\n\n# Transcription\n\n{}", transcription);
+            //transcription_md = transcription_md.replace("spk_", "\nspk_");
+            //let markdown_content = format!("{}{}", summary_md, transcription_md);
+            let markdown_content = format!("{}", summary_md);
 
             file.write_all(markdown_content.as_bytes())
                 .map_err(|e| anyhow::anyhow!("Error writing Markdown file: {}", e))?;
 
             spinner.success("Done!");
             println!(
-                "💾 Summary and transcription written to {}",
+            //    "💾 Summary and transcription written to {}",
+            "💾 Summary written to {}",
                 output_file_path_md.display()
             );
         }

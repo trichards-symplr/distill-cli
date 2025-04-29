@@ -1,0 +1,109 @@
+@startuml
+skinparam sequenceMessageAlign center
+
+actor User
+participant "Main" as Main
+participant "S3Client" as S3
+participant "AWS S3" as AWS_S3
+participant "Transcribe" as Trans
+participant "Summarize" as Sum
+participant "LocalFileSystem" as File
+participant "Slack" as Slack
+
+User -> Main: Run with input_audio_file
+activate Main
+
+Main -> S3: list_buckets()
+activate S3
+S3 -> AWS_S3: ListBuckets
+activate AWS_S3
+AWS_S3 --> S3: BucketList
+deactivate AWS_S3
+S3 --> Main: Vec<String> bucket names
+deactivate S3
+
+alt #LightGray s3_bucket_name in config
+    Main -> Main: validate configured bucket
+else #WhiteSmoke bucket selection needed
+    Main -> User: display bucket selection prompt
+    User --> Main: select bucket
+end
+
+Main -> S3: bucket_region()
+activate S3
+S3 -> AWS_S3: GetBucketLocation
+activate AWS_S3
+AWS_S3 --> S3: LocationConstraint
+deactivate AWS_S3
+S3 --> Main: Region
+deactivate S3
+
+Main -> File: read local audio file
+activate File
+File --> Main: ByteStream
+deactivate File
+
+Main -> S3: put_object()
+activate S3
+S3 -> AWS_S3: PutObject
+activate AWS_S3
+note right: Uploads audio file to S3
+AWS_S3 --> S3: upload result
+deactivate AWS_S3
+S3 --> Main: upload confirmation
+deactivate S3
+
+Main -> Trans: transcribe_audio()
+activate Trans
+Trans --> Main: transcription text
+deactivate Trans
+
+Main -> Sum: summarize_text()
+activate Sum
+Sum --> Main: summary text
+deactivate Sum
+
+alt #LightBlue OutputType::Word
+    Main -> File: create_docx()
+    activate File
+    File --> Main: .docx file created
+    deactivate File
+else #LightGreen OutputType::Text
+    Main -> File: create_text_file()
+    activate File
+    File --> Main: .txt file created
+    deactivate File
+else #LightYellow OutputType::Markdown
+    Main -> File: create_markdown_file()
+    activate File
+    File --> Main: .md file created
+    deactivate File
+else #LightPink OutputType::Terminal
+    Main -> Main: print to console
+else #LightCyan OutputType::Slack
+    alt #White slack webhook configured
+        Main -> Slack: post summary
+        activate Slack
+        Slack --> Main: response
+        deactivate Slack
+    else #WhiteSmoke no webhook
+        Main -> Main: display warning
+        Main -> Main: print summary to console
+    end
+end
+
+alt #LightGray delete_s3_object == "Y"
+    Main -> S3: delete_object()
+    activate S3
+    S3 -> AWS_S3: DeleteObject
+    activate AWS_S3
+    AWS_S3 --> S3: deletion result
+    deactivate AWS_S3
+    S3 --> Main: deletion confirmation
+    deactivate S3
+end
+
+Main --> User: Processing complete
+deactivate Main
+
+@enduml

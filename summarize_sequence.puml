@@ -1,0 +1,61 @@
+@startuml
+participant "Caller" as Caller
+participant "summarize_text()" as Sum
+participant "Config" as Conf
+participant "Bedrock Client" as Client
+participant "AWS Bedrock" as Bedrock
+
+Caller -> Sum: summarize_text(config, text, spinner)
+activate Sum
+
+Sum -> Client: new(config)
+activate Client
+Client --> Sum: client instance
+deactivate Client
+
+Sum -> Conf: Config::builder()
+activate Conf
+Conf -> Conf: add_source(File::with_name("config.toml"))
+Conf -> Conf: build()
+Conf --> Sum: settings
+deactivate Conf
+
+Sum -> Sum: format prompt with template
+
+Sum -> Sum: create messages JSON
+note right: Creates JSON structure\nwith user role and content
+
+Sum -> Sum: create request body JSON
+note right: Includes anthropic_version,\nmax_tokens, system prompt,\nmessages, and model parameters
+
+Sum -> Spinner: update_text("Summarizing transcription...")
+activate Spinner
+Spinner --> Sum
+deactivate Spinner
+
+Sum -> Client: invoke_model()
+activate Client
+Client -> Client: set body(blob_body)
+Client -> Client: set content_type
+Client -> Client: set accept
+Client -> Client: set model_id
+Client -> Bedrock: send()
+activate Bedrock
+
+alt #LightBlue Successful Response
+    Bedrock --> Client: response
+    Client --> Sum: Ok(output)
+    Sum -> Sum: parse response body
+    Sum -> Sum: extract summarization
+    Sum --> Caller: Ok(summarization)
+else #LightGreen Error Response
+    Bedrock --> Client: error
+    Client --> Sum: Err(e)
+    Sum --> Caller: Err(anyhow!(e))
+end
+
+deactivate Bedrock
+deactivate Client
+deactivate Sum
+
+@enduml

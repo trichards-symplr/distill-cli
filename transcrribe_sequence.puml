@@ -1,0 +1,81 @@
+@startuml
+participant "Caller" as Caller
+participant "transcribe_audio()" as Trans
+participant "AWS Transcribe\nClient" as Client
+participant "MediaFormat\nDetector" as Format
+participant "AWS Transcribe\nService" as AWS
+participant "Spinner" as Spin
+
+Caller -> Trans: transcribe_audio(config, file_path, s3_uri, spinner, language_code)
+activate Trans
+
+Trans -> Client: Client::new(config)
+activate Client
+Client --> Trans: client
+deactivate Client
+
+Trans -> Spin: update(spinners::Dots7, "Submitting transcription job")
+activate Spin
+Spin --> Trans
+deactivate Spin
+
+Trans -> Trans: generate unique job_name with UUID
+
+Trans -> Format: get_from_path(file_path)
+activate Format
+
+alt Successful MIME Detection
+    Format --> Trans: MediaFormat (from MIME type)
+else No MIME Type
+    Format --> Trans: Check file extension
+else Error
+    Format --> Trans: Error determining format
+end
+deactivate Format
+
+Trans -> Trans: map language_code to LanguageCode enum
+
+Trans -> Client: start_transcription_job()
+activate Client
+Client -> AWS: Submit job
+AWS --> Client: job details
+Client --> Trans: job response
+deactivate Client
+
+Trans -> Spin: update("Waiting for transcription...")
+activate Spin
+Spin --> Trans
+deactivate Spin
+
+loop Job Status Check
+    Trans -> Client: get_transcription_job()
+    activate Client
+    Client -> AWS: Check status
+    AWS --> Client: current status
+    Client --> Trans: job details
+    deactivate Client
+
+    alt #LightBlue Job Status == InProgress
+        Trans -> Trans: sleep(poll_interval)
+        Trans -> Trans: increase poll_interval
+    else #LightGreen Job Status == Completed
+        Trans -> Trans: exit loop
+    else #Pink Job Status == Failed
+        Trans -> Trans: exit loop with error
+    end
+end
+
+alt #LightGreen Job Completed
+    Trans -> Trans: fetch transcript URI
+    Trans -> Trans: download transcript
+    Trans -> Trans: convert_transcribe_json()
+    Trans --> Caller: Ok(final_transcript)
+else #Pink Job Failed
+    Trans --> Caller: Error with failure reason
+else #Yellow Unexpected Status
+    Trans --> Caller: Error with status message
+end
+
+deactivate Trans
+
+@enduml

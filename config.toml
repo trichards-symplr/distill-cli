@@ -7,7 +7,7 @@
 # the preferred behavior as of publishing this.
 
 [aws]
-# s3_bucket_name = "silly_named_test_bucket"
+s3_bucket_name = "summarizerstack-summarizerbucket670754aa-babyijstslat"
 
 # =============================================================================
 # LLM Settings
