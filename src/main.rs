@@ -70,6 +70,10 @@ async fn main() -> Result<()> {
         .get_string("aws.s3_bucket_name")
         .unwrap_or_default();
 
+    let model_id = settings
+        .get_string("model.model_id")
+        .unwrap_or_default();
+
     let Opt {
         input_audio_file,
         output_type,
@@ -85,6 +89,8 @@ async fn main() -> Result<()> {
     println!("🧙 Welcome to Distill CLI");
 
     let resp = &list_buckets(&s3_client).await;
+
+    println!("📦 Using model: {}", model_id);
 
     if !s3_bucket_name.is_empty() {
         if resp
