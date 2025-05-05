@@ -321,11 +321,11 @@ async fn main() -> Result<()> {
         OutputType::Teams => {
             let client = ReqwestClient::new();
 
-            let slack_webhook_endpoint = settings
+            let teams_webhook_endpoint = settings
                 .get_string("teams.webhook_endpoint")
                 .unwrap_or_default();
 
-            if slack_webhook_endpoint.is_empty() {
+            if teams_webhook_endpoint.is_empty() {
                 spinner.stop_and_persist(
                     "⚠️",
                     "Teams webhook endpoint is not configured. Skipping Teams notification.",
@@ -337,7 +337,7 @@ async fn main() -> Result<()> {
                     "content": content
                 });
                 match client
-                    .post(slack_webhook_endpoint)
+                    .post(teams_webhook_endpoint)
                     .header("Content-Type", "application/json")
                     .json(&payload)
                     .send()
@@ -348,7 +348,7 @@ async fn main() -> Result<()> {
                             spinner.success("Summary sent to Teams!");
                         } else {
                             spinner.stop_and_persist("❌", "Failed to send summary to Teams!");
-                            eprintln!("Error sending summary to Slack: {}", response.status());
+                            eprintln!("Error sending summary to Teams: {}", response.status());
                         }
                     }
                     Err(err) => {
