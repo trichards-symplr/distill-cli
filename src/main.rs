@@ -55,6 +55,7 @@ enum OutputType {
     Word,
     Markdown,
     Slack,
+    Teams,
 }
 
 #[::tokio::main]
@@ -312,6 +313,47 @@ async fn main() -> Result<()> {
                     Err(err) => {
                         spinner.stop_and_persist("❌", "Failed to send summary to Slack!");
                         eprintln!("Error sending summary to Slack: {}", err);
+                    }
+                };
+            }
+        }
+
+        OutputType::Teams => {
+            let client = ReqwestClient::new();
+
+            let slack_webhook_endpoint = settings
+                .get_string("teams.webhook_endpoint")
+                .unwrap_or_default();
+
+            if slack_webhook_endpoint.is_empty() {
+                spinner.stop_and_persist(
+                    "⚠️",
+                    "Teams webhook endpoint is not configured. Skipping Teams notification.",
+                );
+                println!("Summary:\n{}\n", summarized_text);
+            } else {
+                let content = format!("A summarization job just completed:\n\n{}", summarized_text);
+                let payload = json!({
+                    "content": content
+                });
+                match client
+                    .post(slack_webhook_endpoint)
+                    .header("Content-Type", "application/json")
+                    .json(&payload)
+                    .send()
+                    .await
+                {
+                    Ok(response) => {
+                        if response.status().is_success() {
+                            spinner.success("Summary sent to Teams!");
+                        } else {
+                            spinner.stop_and_persist("❌", "Failed to send summary to Teams!");
+                            eprintln!("Error sending summary to Slack: {}", response.status());
+                        }
+                    }
+                    Err(err) => {
+                        spinner.stop_and_persist("❌", "Failed to send summary to Teams!");
+                        eprintln!("Error sending summary to Teams: {}", err);
                     }
                 };
             }
