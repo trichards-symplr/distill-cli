@@ -1,0 +1,99 @@
+#!/usr/bin/bash
+# translit-mv (2010-02-03)
+#
+# Written by: Teemu Likonen <tlikonen@iki.fi>
+#
+# This program is placed in the public domain.
+#
+# Requires GNU tools: getopt, iconv, sed, tr
+
+
+program=$(basename -- "$0")
+
+print_usage() {
+	cat <<EOF
+Usage: $program [OPTIONS] [--] SOURCE ...
+
+  Convert SOURCE filename(s) to safe ASCII versions which contain only
+  [a-z0-9._-] characters. Also truncate consecutive [._-] characters to
+  just one.
+
+Options:
+
+  -t, --test    Test run. Treat SOURCE parameters as plain filename strings
+                and show how the basename(s) would be converted. This is
+                a safe option; SOURCE(s) don't need to be existing
+                files.
+
+  -v, --verbose
+                Explain what is being done.
+
+  -h, --help    Display this help and exit.
+
+EOF
+}
+
+opt=$(getopt -o +tvh -l test,verbose,help -n "$program" -- "$@")
+[ $? -ne 0 ] && exit 1
+eval set -- "$opt"
+
+unset verbose test
+
+while true; do
+	case "$1" in
+	-t|--test)
+		shift 1
+		test=yes
+		;;
+	-v|--verbose)
+		shift 1
+		verbose=--verbose
+		;;
+	-h|--help)
+		print_usage
+		exit 2
+		;;
+	--)
+		shift 1
+		if [ $# -eq 0 ]; then
+			printf "Filename required. See \"%s --help\".\n" \
+			       "$program" >&2
+			exit 1
+		fi
+		break
+		;;
+	*) echo "Error" >&2; exit 1;; 
+	esac
+done
+
+translit() {
+	printf '%s' "$1" | { tr '\n' _; echo; } \
+		| iconv --to-code=ASCII//TRANSLIT | sed -re '
+s/[^a-zA-Z0-9._-]/_/g;
+s/[_-]*\.+[_-]*/./g;
+s/_*-+_*/-/g;
+s/([._-])\1+/\1/g;
+s/^_+(.)/\1/;
+s/[A-Z]/\L&/g;
+s/(.)_+$/\1/'
+}
+
+for old in "$@"; do
+	dir=$(dirname -- "$old")
+	base=$(basename -- "$old")
+	new="$dir/"$(translit "$base")
+
+	if [ "$test" ]; then
+		printf 'Test: "%s" -> "%s"\n' "$old" "${new#./}"
+	elif [ ! -e "$old" ]; then
+		printf "%s: file not found\n" "$old" >&2
+	elif [ "${old#./}" = "${new#./}" ]; then
+		printf "%s: source and destination are the same; skipping\n" \
+		       "$old" >&2
+	elif [ -e "$new" ]; then
+		printf "%s: destination file \`%s' exists; skipping\n" \
+		       "$old" "${new#./}" >&2
+	else
+		mv $verbose -- "$old" "$new"
+	fi
+done
