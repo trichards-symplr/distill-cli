@@ -322,8 +322,10 @@ async fn main() -> Result<()> {
             let client = ReqwestClient::new();
 
             let current_date = chrono::Local::now();
-            let formatted_date = current_date.format("%m-%d-%Y %I:%M:%S %p %:z").to_string();
-            let date_header = format!("Date: {}", formatted_date);
+            let formatted_date = current_date.format("%m-%d-%Y %I:%M:%S %p").to_string();
+            let tz = tz::TimeZone::local().expect("Unable to determine timezone");
+            let tz_name = tz.find_current_local_time_type().expect("Could not find local timezone type").time_zone_designation();
+            let date_header = format!("Date: {} {}", formatted_date, tz_name);
 
             let teams_webhook_endpoint = settings
                 .get_string("teams.webhook_endpoint")
