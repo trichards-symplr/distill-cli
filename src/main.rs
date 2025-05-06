@@ -321,6 +321,10 @@ async fn main() -> Result<()> {
         OutputType::Teams => {
             let client = ReqwestClient::new();
 
+            let current_date = chrono::Local::now();
+            let formatted_date = current_date.format("%Y-%m-%d").to_string();
+            let date_header = format!("Date: {}", formatted_date);
+
             let teams_webhook_endpoint = settings
                 .get_string("teams.webhook_endpoint")
                 .unwrap_or_default();
@@ -332,10 +336,48 @@ async fn main() -> Result<()> {
                 );
                 println!("Summary:\n{}\n", summarized_text);
             } else {
-                let content = format!("A summarization job just completed:\n\n{}", summarized_text);
+                let text = format!("{}", summarized_text);
                 let payload = json!({
-                    "content": content
+                    "type":"message",
+                    "attachments":[
+                       {
+                          "contentType":"application/vnd.microsoft.card.adaptive",
+                          "contentUrl":null,
+                          "content":{
+                             "$schema":"http://adaptivecards.io/schemas/adaptive-card.json",
+                             "type":"AdaptiveCard",
+                             "version":"1.2",
+                             "body":[
+                                 {
+                                    "type": "TextBlock",
+                                    "style": "heading",
+                                    "weight": "Bolder",
+                                    "size": "Large",
+                                    "separator": true,
+                                    "wrap": true,
+                                    "text": "A summarization job just completed:"
+                                 },
+                                 {
+                                    "type": "TextBlock",
+                                    "wrap": true,
+                                    "style": "heading",
+                                    "weight": "Bolder",
+                                    "size": "Medium",
+                                    "text": date_header
+                                 },
+                                 {
+                                 "type": "TextBlock",
+                                 "maxLines": 100,
+                                 "separator": true,
+                                 "wrap": true,
+                                 "text": text
+                                 }
+                             ]
+                          }
+                       }
+                    ]
                 });
+
                 match client
                     .post(teams_webhook_endpoint)
                     .header("Content-Type", "application/json")
