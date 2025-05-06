@@ -322,7 +322,7 @@ async fn main() -> Result<()> {
             let client = ReqwestClient::new();
 
             let current_date = chrono::Local::now();
-            let formatted_date = current_date.format("%Y-%m-%d").to_string();
+            let formatted_date = current_date.format("%m-%d-%Y %I:%M:%S %p %:z").to_string();
             let date_header = format!("Date: {}", formatted_date);
 
             let teams_webhook_endpoint = settings
