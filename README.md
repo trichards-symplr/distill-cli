@@ -220,6 +220,13 @@ To output a summary to a Slack channel, create a [Slack webhook](https://api.sla
 # webhook_endpoint = "https://prod-33.westus.logic.azure.com:443/workflows/....."
 ```
 
+## Automation
+
+Two scripts have been provided that can be found under the **src/scripts** folder.
+
+- distill.sh: Requires the creation of a "in" and "out" folders in the directory where you want to run this cript from. Additionally you must copy the **config.toml** file into the same root directory. This script will iterate through all of the files in the "in" folder and produce a text file of the same name with the summary in the "out" folder.
+- translit-mv: Utility script that will inspect the audio files in the "in" folder and rename them ensuring that transcription and summarization process will not fail to read the files.
+
 ## Security
 
 See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more information.
