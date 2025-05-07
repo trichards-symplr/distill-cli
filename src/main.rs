@@ -18,7 +18,7 @@ use spinoff::{spinners, Color, Spinner};
 
 use aws_sdk_s3::primitives::ByteStream;
 use aws_sdk_s3::Client;
-use dialoguer::{theme::ColorfulTheme, Select};
+use dialoguer::{theme::ColorfulTheme, Select, Input};
 
 #[derive(Debug, Parser)]
 #[clap(
@@ -131,6 +131,18 @@ async fn main() -> Result<()> {
     if bucket_name.is_empty() {
         bail!("\nNo valid S3 bucket found. Please check your AWS configuration.");
     }
+
+    let mut user_input = "".to_string();
+
+    if OutputType::Teams == output_type {
+        let _user_input: String = Input::with_theme(&ColorfulTheme::default())
+        .with_prompt("Enter a title for the Teams card:")
+        .default("A meeting from today...".to_string())
+        .interact_text()
+        .unwrap();
+
+        user_input = _user_input;
+    } 
 
     let mut spinner = Spinner::new(spinners::Dots7, "Uploading file to S3...", Color::Green);
 
@@ -354,7 +366,7 @@ async fn main() -> Result<()> {
                                     "type": "TextBlock",
                                     "style": "heading",
                                     "weight": "Bolder",
-                                    "size": "Large",
+                                    "size": "Medium",
                                     "separator": true,
                                     "wrap": true,
                                     "text": "A summarization job just completed:"
@@ -368,9 +380,17 @@ async fn main() -> Result<()> {
                                     "text": date_header
                                  },
                                  {
+                                    "type": "TextBlock",
+                                    "separator": true,
+                                    "wrap": true,
+                                    "style": "heading",
+                                    "weight": "Bolder",
+                                    "size": "Large",
+                                    "text": user_input
+                                 },
+                                 {
                                  "type": "TextBlock",
                                  "maxLines": 100,
-                                 "separator": true,
                                  "wrap": true,
                                  "text": text
                                  }
