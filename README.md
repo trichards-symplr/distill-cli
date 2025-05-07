@@ -110,9 +110,12 @@ As this is a simple CLI, there are only a few options.
 | Option | Required | Description |
 | - | - | - |
 | `-i`, `--input-audio-file` | Yes | Specify the audio file to be summarized. | 
-| `-o`, `--output-type` | No | Specify the output format of the summary. Default is terminal.<br> **Accepted values**: `terminal`, `text`, `word`, `markdown`, `slack`  |
+| `-o`, `--output-type` | No | Specify the output format of the summary. Default is terminal.<br> **Accepted values**: `terminal`, `text`, `word`, `markdown`, `slack`, `teams` |
 | `-l`, `--language-code` | No | Input language code. Default is `en-US`.<br> **Accepted values**: Check: [Amazon Transcribe Supported Languages Documentation](https://docs.aws.amazon.com/transcribe/latest/dg/supported-languages.html) | 
 | `-h`, `--help` | No | Provides help for the Distill CLI. |
+
+
+Note: For the **MS Teams** output type, you will be asked for a short title that will be used when creating the AdaptiveCard. To use MS Teams, you will need to craete a workflow in Teams that will post to a chat or channel webhook. Copy that webhook into the Teams section of the **config.toml** file.
 
 # Config settings
 
@@ -127,6 +130,16 @@ The CLI is intended as a proof-of-concept, and as such is designed to support An
 model_id = "anthropic.claude-3-sonnet-20240229-v1:0"
 max_tokens = 2000
 temperature = 1.0
+top_p = 0.999
+top_k = 40
+```
+
+Note: For newer models, you will need to use a cross-region model_id, for example:
+
+```
+model_id = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+max_tokens = 4096
+temperature = 0.1
 top_p = 0.999
 top_k = 40
 ```
@@ -185,7 +198,7 @@ $ aws bedrock list-foundation-models
 
 ## Additional output settings
 
-### Slack
+### Slack and Teams
 
 To output a summary to a Slack channel, create a [Slack webhook](https://api.slack.com/messaging/webhooks), then update and uncomment the endpoint in your `config.toml`. If you don't set the endpoint, or if the endpoint is commented out, you'll receive the error "Slack webhook endpoint is not configured. Skipping Slack notification.".
 
@@ -197,6 +210,14 @@ To output a summary to a Slack channel, create a [Slack webhook](https://api.sla
 
 [slack]
 # webhook_endpoint = "https://hooks.slack.com/workflows/XYZ/ABC/123"
+
+# =============================================================================
+# Teams Integration
+# =============================================================================
+
+[teams]
+# Hook to primary team channel
+# webhook_endpoint = "https://prod-33.westus.logic.azure.com:443/workflows/....."
 ```
 
 ## Security

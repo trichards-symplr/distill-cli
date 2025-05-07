@@ -66,4 +66,4 @@ Summarize the following transcript into one or more clear and readable paragraph
 # =============================================================================
 
 [teams]
-# webhook_endpoint = "https://"
+# webhook_endpoint = "https://prod-33.westus.logic.azure.com:443/workflows/....."
