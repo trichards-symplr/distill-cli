@@ -42,6 +42,7 @@ pub async fn summarize_text(
     let body = json!(
         {
             "anthropic_version": settings.get_string("anthropic.anthropic_version").unwrap_or_default(),
+            "anthropic-beta": settings.get_string("anthropic.beta").unwrap_or_default(),
             "max_tokens": settings.get_int("model.max_tokens").unwrap_or_default(),
             "system": settings.get_string("anthropic.system").unwrap_or_default(),
             "messages": messages,

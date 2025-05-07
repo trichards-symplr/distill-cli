@@ -41,6 +41,7 @@ top_k = 40
 [anthropic]
 anthropic_version = "bedrock-2023-05-31"
 system = "Your name is Distiller, and you are an AI assistant that excels at summarizing conversations."
+beta = "output-128k-2025-02-19"
 
 # =============================================================================
 # Prompt Settings
