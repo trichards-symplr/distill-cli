@@ -360,33 +360,67 @@ async fn main() -> Result<()> {
                           "content":{
                              "$schema":"http://adaptivecards.io/schemas/adaptive-card.json",
                              "type":"AdaptiveCard",
-                             "version":"1.2",
+                             "version":"1.5",
+                             "msteams": {
+                                "width": "Full"
+                              },
                              "body":[
                                 {
-                                    "type": "TextBlock",
-
-                                    "wrap": true,
-                                    "style": "heading",
-                                    "weight": "Bolder",
-                                    "size": "Large",
-                                    "text": user_input
-                                 },
-                                 {
+                                    "type": "ColumnSet",
+                                    "columns": [
+                                        {
+                                            "type": "Column",
+                                            "items": [
+                                                {
+                                                    "type": "Icon",
+                                                    "name": "Flash",
+                                                    "size": "Medium",
+                                                    "style": "Filled",
+                                                    "color": "Accent"
+                                                },
+                                            ],
+                                            "width": "auto"
+                                        },
+                                        {
+                                            "type": "Column",
+                                            "spacing": "medium",
+                                            "verticalContentAlignment": "center",
+                                            "items": [
+                                                {
+                                                    "type": "TextBlock",
+                                                    "wrap": true,
+                                                    "style": "heading",
+                                                    "weight": "Bolder",
+                                                    "size": "Large",
+                                                    "text": user_input
+                                                },
+                                            ],
+                                            "width": "auto"
+                                        }
+                                    ]
+                                },
+                                {
                                     "type": "TextBlock",
                                     "wrap": true,
                                     "style": "heading",
                                     "weight": "Bolder",
                                     "size": "Medium",
                                     "text": date_header
-                                 },
-
-                                 {
-                                    "separator": true,
-                                    "type": "TextBlock",
-                                    "maxLines": 100,
-                                    "wrap": true,
-                                    "text": text
-                                 }
+                                },
+                                {
+                                    "type": "Container",
+                                    "showBorder": true,
+                                    "roundedCorners": true,
+                                    "maxHeight": "400px",
+                                    "items": [
+                                        {
+                                            "type": "TextBlock",
+                                            "maxLines": 100,
+                                            "wrap": true,
+                                            "text": text
+                                        }
+                                    ]
+                                }
                              ]
                           }
                        }
