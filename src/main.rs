@@ -362,14 +362,14 @@ async fn main() -> Result<()> {
                              "type":"AdaptiveCard",
                              "version":"1.2",
                              "body":[
-                                 {
+                                {
                                     "type": "TextBlock",
+
+                                    "wrap": true,
                                     "style": "heading",
                                     "weight": "Bolder",
-                                    "size": "Medium",
-                                    "separator": true,
-                                    "wrap": true,
-                                    "text": "A summarization job just completed:"
+                                    "size": "Large",
+                                    "text": user_input
                                  },
                                  {
                                     "type": "TextBlock",
@@ -379,20 +379,13 @@ async fn main() -> Result<()> {
                                     "size": "Medium",
                                     "text": date_header
                                  },
+
                                  {
-                                    "type": "TextBlock",
                                     "separator": true,
+                                    "type": "TextBlock",
+                                    "maxLines": 100,
                                     "wrap": true,
-                                    "style": "heading",
-                                    "weight": "Bolder",
-                                    "size": "Large",
-                                    "text": user_input
-                                 },
-                                 {
-                                 "type": "TextBlock",
-                                 "maxLines": 100,
-                                 "wrap": true,
-                                 "text": text
+                                    "text": text
                                  }
                              ]
                           }
