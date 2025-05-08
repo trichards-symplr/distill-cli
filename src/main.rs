@@ -374,7 +374,7 @@ async fn main() -> Result<()> {
                                                 {
                                                     "type": "Icon",
                                                     "name": "Flash",
-                                                    "size": "Medium",
+                                                    "size": "Large",
                                                     "style": "Filled",
                                                     "color": "Accent"
                                                 },
