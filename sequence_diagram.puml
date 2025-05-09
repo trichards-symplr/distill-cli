@@ -1,0 +1,184 @@
+@startuml
+skinparam sequenceMessageAlign center
+
+actor User
+participant "Main" as Main
+participant "AWSUtils" as AWS
+participant "AWS S3" as AWS_S3
+participant "Transcribe" as Trans
+participant "Summarize" as Sum
+participant "Output" as Out
+participant "LocalFileSystem" as File
+participant "Slack" as Slack
+participant "Teams" as Teams
+
+User -> Main: Run with input_audio_file
+activate Main
+
+Main -> AWS: list_buckets()
+activate AWS
+AWS -> AWS_S3: ListBuckets
+activate AWS_S3
+AWS_S3 --> AWS: BucketList
+deactivate AWS_S3
+AWS --> Main: Vec<String> bucket names
+deactivate AWS
+
+Main -> Main: select_bucket()
+activate Main #DarkGray
+alt #LightGray s3_bucket_name in config
+    Main -> Main: validate configured bucket
+else #WhiteSmoke bucket selection needed
+    Main -> User: display bucket selection prompt
+    User --> Main: select bucket
+end
+deactivate Main
+
+alt #LightBlue Teams output type
+    Main -> Main: get_teams_card_title()
+    User --> Main: enter card title
+end
+
+Main -> AWS: bucket_region()
+activate AWS
+AWS -> AWS_S3: GetBucketLocation
+activate AWS_S3
+AWS_S3 --> AWS: LocationConstraint
+deactivate AWS_S3
+AWS --> Main: Region
+deactivate AWS
+
+Main -> AWS: load_config(region)
+activate AWS
+AWS --> Main: regional_config
+deactivate AWS
+
+Main -> File: read local audio file
+activate File
+File --> Main: ByteStream
+deactivate File
+
+Main -> AWS_S3: put_object()
+activate AWS_S3
+note right: Uploads audio file to S3
+AWS_S3 --> Main: upload result
+deactivate AWS_S3
+
+Main -> Trans: transcribe_audio()
+activate Trans
+Trans --> Main: transcription text
+deactivate Trans
+
+Main -> Sum: summarize_text()
+activate Sum
+Sum --> Main: summary text
+deactivate Sum
+
+alt #LightBlue OutputType::Word
+    Main -> Out: write_word_file()
+    activate Out
+    Out -> File: create file
+    activate File
+    File --> Out: file handle
+    deactivate File
+    Out -> File: write content
+    activate File
+    File --> Out: write result
+    deactivate File
+    Out --> Main: .docx file created
+    deactivate Out
+else #LightGreen OutputType::Text
+    Main -> Out: write_text_file()
+    activate Out
+    Out -> File: create file
+    activate File
+    File --> Out: file handle
+    deactivate File
+    Out -> File: write content
+    activate File
+    File --> Out: write result
+    deactivate File
+    Out --> Main: .txt file created
+    deactivate Out
+else #LightYellow OutputType::Markdown
+    Main -> Out: write_markdown_file()
+    activate Out
+    Out -> File: create file
+    activate File
+    File --> Out: file handle
+    deactivate File
+    Out -> File: write content
+    activate File
+    File --> Out: write result
+    deactivate File
+    Out --> Main: .md file created
+    deactivate Out
+else #LightPink OutputType::Terminal
+    Main -> Main: print to console
+else #LightCyan OutputType::Slack
+    Main -> Out: send_slack_notification()
+    activate Out
+    alt #White slack webhook configured
+        Out -> Slack: post summary
+        activate Slack
+        Slack --> Out: response
+        deactivate Slack
+    else #WhiteSmoke no webhook
+        Out -> Out: display warning
+        Out -> Out: print summary to console
+    end
+    Out --> Main: notification result
+    deactivate Out
+else #LightSalmon OutputType::SlackSplit
+    Main -> File: create text file
+    activate File
+    File --> Main: file created
+    deactivate File
+    Main -> Out: send_slack_notification()
+    activate Out
+    Out -> Slack: post summary
+    activate Slack
+    Slack --> Out: response
+    deactivate Slack
+    Out --> Main: notification result
+    deactivate Out
+else #LightPurple OutputType::Teams
+    Main -> Out: send_teams_notification()
+    activate Out
+    alt #White teams webhook configured
+        Out -> Teams: post adaptive card
+        activate Teams
+        Teams --> Out: response
+        deactivate Teams
+    else #WhiteSmoke no webhook
+        Out -> Out: display warning
+        Out -> Out: print summary to console
+    end
+    Out --> Main: notification result
+    deactivate Out
+else #LightOrange OutputType::TeamsSplit
+    Main -> File: create text file
+    activate File
+    File --> Main: file created
+    deactivate File
+    Main -> Out: send_teams_notification()
+    activate Out
+    Out -> Teams: post adaptive card
+    activate Teams
+    Teams --> Out: response
+    deactivate Teams
+    Out --> Main: notification result
+    deactivate Out
+end
+
+alt #LightGray delete_s3_object == "Y"
+    Main -> AWS_S3: delete_object()
+    activate AWS_S3
+    AWS_S3 --> Main: deletion result
+    deactivate AWS_S3
+end
+
+Main --> User: Processing complete
+deactivate Main
+
+@enduml

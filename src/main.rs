@@ -50,6 +50,7 @@ enum OutputType {
     Word,
     Markdown,
     Slack,
+    SlackSplit,
     Teams,
     TeamsSplit,
 }
@@ -114,14 +115,32 @@ async fn select_bucket(s3_client: &Client, s3_bucket_name: &str) -> Result<Strin
     Ok(bucket_name)
 }
 
+/// Load application settings from config.toml
+fn load_settings() -> Result<Config> {
+    Config::builder()
+        .add_source(ConfigFile::with_name("./config.toml"))
+        .build()
+        .context("Failed to load config.toml. Make sure it exists in the current directory.")
+}
+
 #[::tokio::main]
 async fn main() -> Result<()> {
     env_logger::init();
+    
+    // Parse command-line arguments first
+    let Opt {
+        input_audio_file,
+        output_type,
+        summary_file_name,
+        language_code,
+        delete_s3_object,
+    } = Opt::parse();
+    
+    // Load AWS config
     let config = aws_utils::load_config(None).await;
-
-    let settings = Config::builder()
-        .add_source(ConfigFile::with_name("./config.toml"))
-        .build()?;
+    
+    // Load application settings from config.toml
+    let settings = load_settings()?;
 
     let s3_bucket_name = settings
         .get_string("aws.s3_bucket_name")
@@ -131,14 +150,6 @@ async fn main() -> Result<()> {
         .get_string("model.model_id")
         .unwrap_or_default();
 
-    let Opt {
-        input_audio_file,
-        output_type,
-        summary_file_name,
-        language_code,
-        delete_s3_object,
-    } = Opt::parse();
-
     let s3_client = Client::new(&config);
 
     println!("🧙 Welcome to Distill CLI");
@@ -147,7 +158,8 @@ async fn main() -> Result<()> {
     // Select or validate S3 bucket
     let bucket_name = select_bucket(&s3_client, &s3_bucket_name).await?;
 
-    if output_type != OutputType::Teams && output_type != OutputType::Slack {
+    if output_type != OutputType::Teams && output_type != OutputType::TeamsSplit && 
+       output_type != OutputType::Slack && output_type != OutputType::SlackSplit {
         println!("📦 Current output file name: {}", summary_file_name);
     }
 
@@ -245,6 +257,25 @@ async fn main() -> Result<()> {
         OutputType::Slack => {
             output::send_slack_notification(&settings, &mut spinner, &summarized_text).await?;
         }
+        OutputType::SlackSplit => {
+            // First write to a file
+            let ext: &str = ".txt";
+            let outfile = summary_file_name + ext;
+            let output_file_path_txt = Path::new(&outfile);
+            let mut file = File::create(output_file_path_txt)
+                .map_err(|e| anyhow::anyhow!("Error creating file: {}", e))?;
+
+            file.write_all(summarized_text.as_bytes())
+                .map_err(|e| anyhow::anyhow!("Error creating file: {}", e))?;
+
+            println!("\n💾 Summary written to {}", output_file_path_txt.display());
+            
+            // Update spinner for Slack notification
+            spinner.update(spinners::Dots7, "Sending to Slack...", None);
+            
+            // Send to Slack
+            output::send_slack_notification(&settings, &mut spinner, &summarized_text).await?;
+        }
         OutputType::Teams => {
             output::send_teams_notification(
                 &settings,
@@ -257,8 +288,6 @@ async fn main() -> Result<()> {
         }
         OutputType::TeamsSplit => {
             // First write to a file
-            // Had to directly put this here in TeamsSplit since the spinner was being
-            // placed into a panic because it was being called twice.
             let ext: &str = ".txt";
             let outfile = summary_file_name + ext;
             let output_file_path_txt = Path::new(&outfile);
