@@ -129,7 +129,20 @@ else #LightCyan OutputType::Slack
     end
     Out --> Main: notification result
     deactivate Out
-else #LightGreen OutputType::Teams
+else #LightSalmon OutputType::SlackSplit
+    Main -> File: create text file
+    activate File
+    File --> Main: file created
+    deactivate File
+    Main -> Out: send_slack_notification()
+    activate Out
+    Out -> Slack: post summary
+    activate Slack
+    Slack --> Out: response
+    deactivate Slack
+    Out --> Main: notification result
+    deactivate Out
+else #LightCoral OutputType::Teams
     Main -> Out: send_teams_notification()
     activate Out
     alt #White teams webhook configured
@@ -143,7 +156,7 @@ else #LightGreen OutputType::Teams
     end
     Out --> Main: notification result
     deactivate Out
-else #LightSalmon OutputType::TeamsSplit
+else #LightSkyBlue OutputType::TeamsSplit
     Main -> File: create text file
     activate File
     File --> Main: file created
