@@ -257,6 +257,8 @@ async fn main() -> Result<()> {
         }
         OutputType::TeamsSplit => {
             // First write to a file
+            // Had to directly put this here in TeamsSplit since the spinner was being
+            // placed into a panic because it was being called twice.
             let ext: &str = ".txt";
             let outfile = summary_file_name + ext;
             let output_file_path_txt = Path::new(&outfile);
