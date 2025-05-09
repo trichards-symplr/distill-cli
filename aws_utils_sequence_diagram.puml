@@ -1,0 +1,79 @@
+@startuml
+skinparam sequenceMessageAlign center
+
+participant "Main" as Main
+participant "AWSUtils" as AWS
+participant "AWS SDK" as SDK
+participant "AWS S3 Service" as S3
+
+== AWS Configuration and S3 Operations ==
+
+group #LightSkyBlue load_config
+    Main -> AWS: load_config(region)
+    activate AWS
+    
+    alt #PaleGreen region is provided
+        AWS -> AWS: config.region(region)
+    else #LightYellow region is not provided
+        AWS -> AWS: config.region(RegionProviderChain.default_provider().or_else("us-east-1"))
+    end
+    
+    AWS -> AWS: config.stalled_stream_protection(StalledStreamProtectionConfig::disabled())
+    
+    AWS -> SDK: config.load().await
+    activate SDK
+    SDK --> AWS: SdkConfig
+    deactivate SDK
+    
+    AWS --> Main: SdkConfig
+    deactivate AWS
+end
+
+group #LightGreen list_buckets
+    Main -> AWS: list_buckets(client)
+    activate AWS
+    
+    AWS -> S3: client.list_buckets().send().await
+    activate S3
+    S3 --> AWS: ListBucketsOutput
+    deactivate S3
+    
+    AWS -> AWS: extract bucket names
+    note right: Iterates through buckets and\ncollects names into a Vec<String>
+    
+    alt #MistyRose error occurred
+        AWS --> Main: Error
+    else #PaleTurquoise success
+        AWS --> Main: Vec<String> of bucket names
+    end
+    
+    deactivate AWS
+end
+
+group #LightCoral bucket_region
+    Main -> AWS: bucket_region(client, bucket_name)
+    activate AWS
+    
+    AWS -> S3: client.get_bucket_location().bucket(bucket_name).send().await
+    activate S3
+    S3 --> AWS: GetBucketLocationOutput
+    deactivate S3
+    
+    AWS -> AWS: extract location_constraint
+    
+    alt #MistyRose error occurred
+        AWS --> Main: Error("Bucket has no location_constraint")
+    else #PaleTurquoise success
+        alt #LightYellow location_constraint is empty
+            AWS -> AWS: Region::new("us-east-1")
+        else #LightGreen location_constraint has value
+            AWS -> AWS: Region::new(location_constraint)
+        end
+        
+        AWS --> Main: Region
+    end
+    
+    deactivate AWS
+end
+
+@enduml

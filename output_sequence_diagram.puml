@@ -1,0 +1,187 @@
+@startuml
+skinparam sequenceMessageAlign center
+
+participant "Main" as Main
+participant "Output" as Out
+participant "FileSystem" as FS
+participant "Spinner" as Spin
+participant "Slack API" as Slack
+participant "Teams API" as Teams
+participant "Timezone" as TZ
+
+== File Output Functions ==
+
+group #LightBlue write_text_file
+    Main -> Out: write_text_file(summary_file_name, summarized_text, spinner)
+    activate Out
+    
+    Out -> Out: create file path
+    Out -> FS: File::create(output_file_path)
+    activate FS
+    FS --> Out: file handle
+    deactivate FS
+    
+    Out -> FS: file.write_all(summarized_text.as_bytes())
+    activate FS
+    FS --> Out: write result
+    deactivate FS
+    
+    Out -> Spin: spinner.success("Done!")
+    activate Spin
+    Spin --> Out: spinner stopped
+    deactivate Spin
+    
+    Out -> Main: display success message
+    Out --> Main: Ok(())
+    deactivate Out
+end
+
+group #LightGreen write_word_file
+    Main -> Out: write_word_file(summary_file_name, summarized_text, spinner)
+    activate Out
+    
+    Out -> Out: create file path
+    Out -> FS: File::create(output_file_path)
+    activate FS
+    FS --> Out: file handle
+    deactivate FS
+    
+    Out -> Out: create Docx document
+    Out -> Out: add paragraphs with text
+    
+    Out -> FS: doc.build().pack(file)
+    activate FS
+    FS --> Out: write result
+    deactivate FS
+    
+    Out -> Spin: spinner.success("Done!")
+    activate Spin
+    Spin --> Out: spinner stopped
+    deactivate Spin
+    
+    Out -> Main: display success message
+    Out --> Main: Ok(())
+    deactivate Out
+end
+
+group #LightYellow write_markdown_file
+    Main -> Out: write_markdown_file(summary_file_name, summarized_text, spinner)
+    activate Out
+    
+    Out -> Out: create file path
+    Out -> FS: File::create(output_file_path)
+    activate FS
+    FS --> Out: file handle
+    deactivate FS
+    
+    Out -> Out: format markdown content
+    
+    Out -> FS: file.write_all(markdown_content.as_bytes())
+    activate FS
+    FS --> Out: write result
+    deactivate FS
+    
+    Out -> Spin: spinner.success("Done!")
+    activate Spin
+    Spin --> Out: spinner stopped
+    deactivate Spin
+    
+    Out -> Main: display success message
+    Out --> Main: Ok(())
+    deactivate Out
+end
+
+== Notification Functions ==
+
+group #LightCoral send_slack_notification
+    Main -> Out: send_slack_notification(settings, spinner, summarized_text)
+    activate Out
+    
+    Out -> Out: create ReqwestClient
+    Out -> Out: get slack_webhook_endpoint from settings
+    
+    alt #WhiteSmoke webhook endpoint is empty
+        Out -> Spin: spinner.stop_and_persist("⚠️", "Slack webhook endpoint is not configured...")
+        activate Spin
+        Spin --> Out: spinner stopped
+        deactivate Spin
+        Out -> Main: print summary to console
+        Out --> Main: Ok(())
+    else #AliceBlue webhook endpoint exists
+        Out -> Out: format content and create payload
+        
+        Out -> Slack: client.post(slack_webhook_endpoint).send()
+        activate Slack
+        
+        alt #PaleGreen successful response
+            Slack --> Out: success response
+            Out -> Spin: spinner.success("Summary sent to Slack!")
+            activate Spin
+            Spin --> Out: spinner stopped
+            deactivate Spin
+        else #MistyRose error response
+            Slack --> Out: error response
+            Out -> Main: print error message
+            Out -> Spin: spinner.stop_and_persist("❌", "Failed to send summary to Slack!")
+            activate Spin
+            Spin --> Out: spinner stopped
+            deactivate Spin
+        end
+        
+        deactivate Slack
+        Out --> Main: Ok(())
+    end
+    
+    deactivate Out
+end
+
+group #LightSkyBlue send_teams_notification
+    Main -> Out: send_teams_notification(settings, spinner, summarized_text, user_input, success_message)
+    activate Out
+    
+    Out -> Out: create ReqwestClient
+    
+    Out -> TZ: get current date and timezone
+    activate TZ
+    TZ --> Out: formatted date and timezone
+    deactivate TZ
+    
+    Out -> Out: format date header
+    Out -> Out: get teams_webhook_endpoint from settings
+    
+    alt #WhiteSmoke webhook endpoint is empty
+        Out -> Spin: spinner.stop_and_persist("⚠️", "Teams webhook endpoint is not configured...")
+        activate Spin
+        Spin --> Out: spinner stopped
+        deactivate Spin
+        Out -> Main: print summary to console
+        Out --> Main: Ok(())
+    else #AliceBlue webhook endpoint exists
+        Out -> Out: create adaptive card payload
+        
+        Out -> Teams: client.post(teams_webhook_endpoint).send()
+        activate Teams
+        
+        alt #PaleGreen successful response
+            Teams --> Out: success response
+            Out -> Spin: spinner.success(success_message)
+            activate Spin
+            Spin --> Out: spinner stopped
+            deactivate Spin
+        else #MistyRose error response
+            Teams --> Out: error response
+            Out -> Main: print error message
+            Out -> Spin: spinner.stop_and_persist("❌", "Failed to send summary to Teams!")
+            activate Spin
+            Spin --> Out: spinner stopped
+            deactivate Spin
+        end
+        
+        deactivate Teams
+        Out --> Main: Ok(())
+    end
+    
+    deactivate Out
+end
+
+@enduml

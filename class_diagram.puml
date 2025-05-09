@@ -14,13 +14,20 @@ enum OutputType {
   Word
   Markdown
   Slack
+  Teams
+  TeamsSplit
 }
 
 class Main {
-  - load_config(region: Option<Region>): SdkConfig
-  - list_buckets(client: &Client): Result<Vec<String>>
-  - bucket_region(client: &Client, bucket_name: &str): Result<Region>
+  - get_teams_card_title(): String
+  - select_bucket(s3_client: &Client, s3_bucket_name: &str): Result<String>
   + main(): Result<()>
+}
+
+class AWSUtils {
+  + load_config(region: Option<Region>): SdkConfig
+  + list_buckets(client: &Client): Result<Vec<String>>
+  + bucket_region(client: &Client, bucket_name: &str): Result<Region>
 }
 
 class Transcribe {
@@ -31,25 +38,20 @@ class Summarize {
   + summarize_text(config: &SdkConfig, text: &str, spinner: &mut Spinner): Result<String>
 }
 
-class FileHandler {
-  - create_word_doc(summary: String, transcription: String)
-  - create_text_file(summary: String, transcription: String)
-  - create_markdown(summary: String, transcription: String)
-}
-
-class S3Client {
-  - bucket_name: String
-  - region: Region
-  + upload_file(file_path: Path)
-  + delete_object(key: String)
+class Output {
+  + write_text_file(summary_file_name: &str, summarized_text: &str, spinner: &mut Spinner): Result<()>
+  + write_word_file(summary_file_name: &str, summarized_text: &str, spinner: &mut Spinner): Result<()>
+  + write_markdown_file(summary_file_name: &str, summarized_text: &str, spinner: &mut Spinner): Result<()>
+  + send_slack_notification(settings: &Config, spinner: &mut Spinner, summarized_text: &str): Result<()>
+  + send_teams_notification(settings: &Config, spinner: &mut Spinner, summarized_text: &str, user_input: &str, success_message: &str): Result<()>
 }
 
 Main --> Opt : uses
 Main --> OutputType : uses
+Main --> AWSUtils : uses
 Main --> Transcribe : uses
 Main --> Summarize : uses
-Main --> S3Client : uses
-Main --> FileHandler : uses
+Main --> Output : uses
 Opt *-- OutputType : contains
 
 @enduml
