@@ -1,24 +1,17 @@
+mod aws_utils;
+mod output;
 mod summarize;
 mod transcribe;
 
-use std::fs::File;
-use std::io::Write;
 use std::path::Path;
 
 use anyhow::{bail, Context, Result};
-use aws_config::meta::region::RegionProviderChain;
-use aws_config::{Region, SdkConfig};
-use aws_sdk_s3::config::StalledStreamProtectionConfig;
-use clap::Parser;
-use config::{Config, File as ConfigFile};
-use docx_rs::{Docx, Paragraph, Run};
-use reqwest::Client as ReqwestClient;
-use serde_json::json;
-use spinoff::{spinners, Color, Spinner};
-
 use aws_sdk_s3::primitives::ByteStream;
 use aws_sdk_s3::Client;
-use dialoguer::{theme::ColorfulTheme, Select, Input};
+use clap::Parser;
+use config::{Config, File as ConfigFile};
+use dialoguer::{theme::ColorfulTheme, Input, Select};
+use spinoff::{spinners, Color, Spinner};
 
 #[derive(Debug, Parser)]
 #[clap(
@@ -38,7 +31,7 @@ struct Opt {
     )]
     output_type: OutputType,
 
-    #[clap(short, long, default_value ="summarized_output")]
+    #[clap(short, long, default_value = "summarized_output")]
     summary_file_name: String,
 
     #[clap(short, long, default_value = "en-US")]
@@ -59,10 +52,70 @@ enum OutputType {
     TeamsSplit,
 }
 
+/// Get Teams card title from user input
+fn get_teams_card_title() -> String {
+    Input::with_theme(&ColorfulTheme::default())
+        .with_prompt("📝 Enter a title for the Teams card:")
+        .default("A meeting from today...".to_string())
+        .interact_text()
+        .unwrap_or_else(|_| "A meeting from today...".to_string())
+}
+
+/// Select or validate S3 bucket
+async fn select_bucket(s3_client: &Client, s3_bucket_name: &str) -> Result<String> {
+    let resp = &aws_utils::list_buckets(s3_client).await;
+    let mut bucket_name = String::new();
+
+    if !s3_bucket_name.is_empty() {
+        if resp
+            .as_ref()
+            .ok()
+            .and_then(|buckets| buckets.iter().find(|b| b.as_str() == s3_bucket_name))
+            .is_some()
+        {
+            println!("📦 S3 bucket name: {}", s3_bucket_name);
+            bucket_name = s3_bucket_name.to_string();
+        } else {
+            println!(
+                "Error: The configured S3 bucket '{}' was not found.",
+                s3_bucket_name
+            );
+        }
+    }
+
+    if bucket_name.is_empty() {
+        match resp {
+            Ok(bucket_names) => {
+                if bucket_names.is_empty() {
+                    bail!("\nNo S3 buckets found. Please create an S3 bucket first.");
+                }
+                
+                let selection = Select::with_theme(&ColorfulTheme::default())
+                    .with_prompt("Choose a destination S3 bucket for your audio file")
+                    .default(0)
+                    .items(&bucket_names[..])
+                    .interact()?;
+
+                bucket_name = bucket_names[selection].clone();
+            }
+            Err(err) => {
+                println!("Error getting bucket list: {}", err);
+                bail!("\nError getting bucket list: {}", err);
+            }
+        };
+    }
+
+    if bucket_name.is_empty() {
+        bail!("\nNo valid S3 bucket found. Please check your AWS configuration.");
+    }
+
+    Ok(bucket_name)
+}
+
 #[::tokio::main]
 async fn main() -> Result<()> {
     env_logger::init();
-    let config = load_config(None).await;
+    let config = aws_utils::load_config(None).await;
 
     let settings = Config::builder()
         .add_source(ConfigFile::with_name("./config.toml"))
@@ -86,90 +139,34 @@ async fn main() -> Result<()> {
 
     let s3_client = Client::new(&config);
 
-    let mut bucket_name = String::new();
-
     println!("🧙 Welcome to Distill CLI");
-
-    let resp = &list_buckets(&s3_client).await;
-
     println!("📦 Using model: {}", model_id);
 
-    if !s3_bucket_name.is_empty() {
-        if resp
-            .as_ref()
-            .ok()
-            .and_then(|buckets| buckets.iter().find(|b| b.as_str() == s3_bucket_name))
-            .is_some()
-        {
-            println!("📦 S3 bucket name: {}", s3_bucket_name);
-            bucket_name = s3_bucket_name;
-        } else {
-            println!(
-                "Error: The configured S3 bucket '{}' was not found.",
-                s3_bucket_name
-            );
-        }
-    }
+    // Select or validate S3 bucket
+    let bucket_name = select_bucket(&s3_client, &s3_bucket_name).await?;
 
-    if bucket_name.is_empty() {
-        match resp {
-            Ok(bucket_names) => {
-                let selection = Select::with_theme(&ColorfulTheme::default())
-                    .with_prompt("Choose a destination S3 bucket for your audio file")
-                    .default(0)
-                    .items(&bucket_names[..])
-                    .interact()?;
-
-                bucket_name.clone_from(&bucket_names[selection]);
-            }
-            Err(err) => {
-                println!("Error getting bucket list: {}", err);
-                bail!("\nError getting bucket list: {}", err);
-            }
-        };
-    }
-
-    if bucket_name.is_empty() {
-        bail!("\nNo valid S3 bucket found. Please check your AWS configuration.");
-    }
-
-    if output_type != OutputType::Teams || output_type != OutputType::Slack {
+    if output_type != OutputType::Teams && output_type != OutputType::Slack {
         println!("📦 Current output file name: {}", summary_file_name);
     }
 
-    let mut user_input = "".to_string();
-
-    if OutputType::Teams == output_type {
-        let _user_input: String = Input::with_theme(&ColorfulTheme::default())
-        .with_prompt("📝 Enter a title for the Teams card:")
-        .default("A meeting from today...".to_string())
-        .interact_text()
-        .unwrap();
-
-        user_input = _user_input;
-    } 
-
-    if OutputType::TeamsSplit == output_type {
-        let _user_input: String = Input::with_theme(&ColorfulTheme::default())
-        .with_prompt("📝 Enter a title for the Teams card:")
-        .default("A meeting from today...".to_string())
-        .interact_text()
-        .unwrap();
-
-        user_input = _user_input;
-    } 
+    // Get Teams card title if needed
+    let user_input = if output_type == OutputType::Teams || output_type == OutputType::TeamsSplit {
+        get_teams_card_title()
+    } else {
+        String::new()
+    };
 
     let mut spinner = Spinner::new(spinners::Dots7, "Uploading file to S3...", Color::Green);
 
     // Load the bucket region and create a new client to use that region
-    let region = bucket_region(&s3_client, &bucket_name).await?;
+    let region = aws_utils::bucket_region(&s3_client, &bucket_name).await?;
     println!();
     spinner.update(
         spinners::Dots7,
         format!("Using bucket region {}", region),
         None,
     );
-    let regional_config = load_config(Some(region)).await;
+    let regional_config = aws_utils::load_config(Some(region)).await;
     let regional_s3_client = Client::new(&regional_config);
 
     // Handle conversion of relative paths to absolute paths
@@ -211,7 +208,7 @@ async fn main() -> Result<()> {
     let s3_uri = format!("s3://{}/{}", bucket_name, file_name);
 
     println!();
-    spinner.update(spinners::Dots7, "Summarizing text...", None);
+    spinner.update(spinners::Dots7, "Transcribing audio...", None);
 
     // Transcribe the audio
     let transcription: String = transcribe::transcribe_audio(
@@ -227,126 +224,27 @@ async fn main() -> Result<()> {
     spinner.update(spinners::Dots7, "Summarizing text...", None);
     let summarized_text = summarize::summarize_text(&config, &transcription, &mut spinner).await?;
 
+    // Process output based on selected output type
     match output_type {
         OutputType::Word => {
-            let ext: &str = ".docx";
-            let outfile = summary_file_name + ext;
-            let output_file_path_word = Path::new(&outfile);
-            let file = File::create(output_file_path_word)
-                .map_err(|e| anyhow::anyhow!("Error creating file: {}", e))?;
-
-            // Creating a new document and adding paragraphs
-            let doc = Docx::new()
-                .add_paragraph(Paragraph::new().add_run(Run::new().add_text(&summarized_text)))
-                .add_paragraph(Paragraph::new().add_run(Run::new().add_text("\n\n")));
-            //    .add_paragraph(Paragraph::new().add_run(Run::new().add_text("Transcription:\n")))
-            //    .add_paragraph(Paragraph::new().add_run(Run::new().add_text(&transcription)));
-
-            // Building and saving the document
-            doc.build()
-                .pack(file)
-                .map_err(|e| anyhow::anyhow!("Error writing Word document: {}", e))?;
-
-            spinner.success("Done!");
-            println!(
-            //    "💾 Summary and transcription written to {}",
-                "💾 Summary written to {}",
-                output_file_path_word.display()
-            );
+            output::write_word_file(&summary_file_name, &summarized_text, &mut spinner)?;
         }
         OutputType::Text => {
-            let ext: &str = ".txt";
-            let outfile = summary_file_name + ext;
-            let output_file_path_txt = Path::new(&outfile);
-            let mut file = File::create(output_file_path_txt)
-                .map_err(|e| anyhow::anyhow!("Error creating file: {}", e))?;
-
-            file.write_all(summarized_text.as_bytes())
-                .map_err(|e| anyhow::anyhow!("Error creating file: {}", e))?;
-            //file.write_all(b"\n\nTranscription:\n")
-            //    .map_err(|e| anyhow::anyhow!("Error creating file: {}", e))?;
-            //file.write_all(transcription.as_bytes())
-            //    .map_err(|e| anyhow::anyhow!("Error creating file: {}", e))?;
-
-            spinner.success("Done!");
-            println!(
-            //    "💾 Summary and transcription written to {}",
-                "💾 Summary written to {}",
-                output_file_path_txt.display()
-            );
+            output::write_text_file(&summary_file_name, &summarized_text, &mut spinner)?;
         }
         OutputType::Terminal => {
             spinner.success("Done!");
             println!();
             println!("Summary:\n{}\n", summarized_text);
-            //println!("Transcription:\n{}\n", transcription);
         }
         OutputType::Markdown => {
-            let ext: &str = ".md";
-            let outfile = summary_file_name + ext;
-            let output_file_path_md = Path::new(&outfile);
-            let mut file = File::create(output_file_path_md)
-                .map_err(|e| anyhow::anyhow!("Error creating file: {}", e))?;
-
-            let summary_md = format!("# Summary\n\n{}", summarized_text);
-            //let mut transcription_md = format!("\n\n# Transcription\n\n{}", transcription);
-            //transcription_md = transcription_md.replace("spk_", "\nspk_");
-            //let markdown_content = format!("{}{}", summary_md, transcription_md);
-            let markdown_content = format!("{}", summary_md);
-
-            file.write_all(markdown_content.as_bytes())
-                .map_err(|e| anyhow::anyhow!("Error writing Markdown file: {}", e))?;
-
-            spinner.success("Done!");
-            println!(
-            //    "💾 Summary and transcription written to {}",
-            "💾 Summary written to {}",
-                output_file_path_md.display()
-            );
+            output::write_markdown_file(&summary_file_name, &summarized_text, &mut spinner)?;
         }
         OutputType::Slack => {
-            let client = ReqwestClient::new();
-
-            let slack_webhook_endpoint = settings
-                .get_string("slack.webhook_endpoint")
-                .unwrap_or_default();
-
-            if slack_webhook_endpoint.is_empty() {
-                spinner.stop_and_persist(
-                    "⚠️",
-                    "Slack webhook endpoint is not configured. Skipping Slack notification.",
-                );
-                println!("Summary:\n{}\n", summarized_text);
-            } else {
-                let content = format!("A summarization job just completed:\n\n{}", summarized_text);
-                let payload = json!({
-                    "content": content
-                });
-                match client
-                    .post(slack_webhook_endpoint)
-                    .header("Content-Type", "application/json")
-                    .json(&payload)
-                    .send()
-                    .await
-                {
-                    Ok(response) => {
-                        if response.status().is_success() {
-                            spinner.success("Summary sent to Slack!");
-                        } else {
-                            spinner.stop_and_persist("❌", "Failed to send summary to Slack!");
-                            eprintln!("Error sending summary to Slack: {}", response.status());
-                        }
-                    }
-                    Err(err) => {
-                        spinner.stop_and_persist("❌", "Failed to send summary to Slack!");
-                        eprintln!("Error sending summary to Slack: {}", err);
-                    }
-                };
-            }
+            output::send_slack_notification(&settings, &mut spinner, &summarized_text).await?;
         }
-
         OutputType::Teams => {
-            send_teams_notification(
+            output::send_teams_notification(
                 &settings,
                 &mut spinner,
                 &summarized_text,
@@ -355,25 +253,12 @@ async fn main() -> Result<()> {
             )
             .await?;
         }
-
         OutputType::TeamsSplit => {
             // First write to a file before sending to Teams
-            let ext: &str = ".txt";
-            let outfile = summary_file_name + ext;
-            let output_file_path_txt = Path::new(&outfile);
-            let mut file = File::create(output_file_path_txt)
-                .map_err(|e| anyhow::anyhow!("Error creating file: {}", e))?;
-
-            file.write_all(summarized_text.as_bytes())
-                .map_err(|e| anyhow::anyhow!("Error creating file: {}", e))?;
-
-            println!(
-                "💾 Summary written to {}",
-                output_file_path_txt.display()
-            );
-
+            output::write_text_file(&summary_file_name, &summarized_text, &mut spinner)?;
+            
             // Send to Teams
-            send_teams_notification(
+            output::send_teams_notification(
                 &settings,
                 &mut spinner,
                 &summarized_text,
@@ -392,186 +277,6 @@ async fn main() -> Result<()> {
             .key(&file_name)
             .send()
             .await?;
-    }
-
-    Ok(())
-}
-
-// Load the user's aws config, default region to us-east-1 if none is provided or can be found
-async fn load_config(region: Option<Region>) -> SdkConfig {
-    let mut config = aws_config::from_env();
-    match region {
-        Some(region) => config = config.region(region),
-        None => {
-            config = config.region(RegionProviderChain::default_provider().or_else("us-east-1"))
-        }
-    }
-
-    // Resolves issues with uploading large S3 files
-    // See https://github.com/awslabs/aws-sdk-rust/issues/1146
-    config = config
-        .stalled_stream_protection(
-            StalledStreamProtectionConfig::disabled()
-        );
-
-    config.load().await
-}
-
-async fn list_buckets(client: &Client) -> Result<Vec<String>> {
-    let resp = client.list_buckets().send().await?;
-    let buckets = resp.buckets();
-
-    let bucket_names: Vec<String> = buckets
-        .iter()
-        .map(|bucket| bucket.name().unwrap_or_default().to_string())
-        .collect();
-
-    Ok(bucket_names)
-}
-
-async fn bucket_region(client: &Client, bucket_name: &str) -> Result<Region> {
-    let resp = client
-        .get_bucket_location()
-        .bucket(bucket_name)
-        .send()
-        .await?;
-
-    let location_constraint = resp
-        .location_constraint()
-        .context("Bucket has no location_constraint")?;
-
-    if location_constraint.as_str() == "" {
-        Ok(Region::new("us-east-1"))
-    } else {
-        Ok(Region::new(location_constraint.as_str().to_owned()))
-    }
-}
-
-/// Send a notification to Microsoft Teams
-async fn send_teams_notification(
-    settings: &Config,
-    spinner: &mut Spinner,
-    summarized_text: &str,
-    user_input: &str,
-    success_message: &str,
-) -> Result<()> {
-    let client = ReqwestClient::new();
-
-    let current_date = chrono::Local::now();
-    let formatted_date = current_date.format("%m-%d-%Y %I:%M:%S %p").to_string();
-    let tz = tz::TimeZone::local().expect("Unable to determine timezone");
-    let tz_name = tz.find_current_local_time_type().expect("Could not find local timezone type").time_zone_designation();
-    let date_header = format!("Date: {} {}", formatted_date, tz_name);
-
-    let teams_webhook_endpoint = settings
-        .get_string("teams.webhook_endpoint")
-        .unwrap_or_default();
-
-    if teams_webhook_endpoint.is_empty() {
-        spinner.stop_and_persist(
-            "⚠️",
-            "Teams webhook endpoint is not configured. Skipping Teams notification.",
-        );
-        println!("Summary:\n{}\n", summarized_text);
-        return Ok(());
-    }
-
-    let text = format!("{}", summarized_text);
-    let payload = json!({
-        "type":"message",
-        "attachments":[
-           {
-              "contentType":"application/vnd.microsoft.card.adaptive",
-              "contentUrl":null,
-              "content":{
-                 "$schema":"http://adaptivecards.io/schemas/adaptive-card.json",
-                 "type":"AdaptiveCard",
-                 "version":"1.5",
-                 "msteams": {
-                    "width": "Full"
-                  },
-                 "body":[
-                    {
-                        "type": "ColumnSet",
-                        "columns": [
-                            {
-                                "type": "Column",
-                                "items": [
-                                    {
-                                        "type": "Icon",
-                                        "name": "Flash",
-                                        "size": "Large",
-                                        "style": "Filled",
-                                        "color": "Accent"
-                                    },
-                                ],
-                                "width": "auto"
-                            },
-                            {
-                                "type": "Column",
-                                "spacing": "medium",
-                                "verticalContentAlignment": "center",
-                                "items": [
-                                    {
-                                        "type": "TextBlock",
-                                        "wrap": true,
-                                        "style": "heading",
-                                        "weight": "Bolder",
-                                        "size": "Large",
-                                        "text": user_input
-                                    },
-                                ],
-                                "width": "auto"
-                            }
-                        ]
-                    },
-                    {
-                        "type": "TextBlock",
-                        "wrap": true,
-                        "style": "heading",
-                        "weight": "Bolder",
-                        "size": "Medium",
-                        "text": date_header
-                    },
-                    {
-                        "type": "Container",
-                        "showBorder": true,
-                        "roundedCorners": true,
-                        "maxHeight": "400px",
-                        "items": [
-                            {
-                                "type": "TextBlock",
-                                "maxLines": 100,
-                                "wrap": true,
-                                "text": text
-                            }
-                        ]
-                    }
-                 ]
-              }
-           }
-        ]
-    });
-
-    match client
-        .post(teams_webhook_endpoint)
-        .header("Content-Type", "application/json")
-        .json(&payload)
-        .send()
-        .await
-    {
-        Ok(response) => {
-            if response.status().is_success() {
-                spinner.success(success_message);
-            } else {
-                spinner.stop_and_persist("❌", "Failed to send summary to Teams!");
-                eprintln!("Error sending summary to Teams: {}", response.status());
-            }
-        }
-        Err(err) => {
-            spinner.stop_and_persist("❌", "Failed to send summary to Teams!");
-            eprintln!("Error sending summary to Teams: {}", err);
-        }
     }
 
     Ok(())
