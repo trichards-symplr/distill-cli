@@ -38,7 +38,7 @@ struct Opt {
     )]
     output_type: OutputType,
 
-    #[clap(short, long, default_value ="summary")]
+    #[clap(short, long, default_value ="summarized_output")]
     summary_file_name: String,
 
     #[clap(short, long, default_value = "en-US")]
@@ -56,6 +56,7 @@ enum OutputType {
     Markdown,
     Slack,
     Teams,
+    TeamsSplit,
 }
 
 #[::tokio::main]
@@ -132,11 +133,25 @@ async fn main() -> Result<()> {
         bail!("\nNo valid S3 bucket found. Please check your AWS configuration.");
     }
 
+    if output_type != OutputType::Teams || output_type != OutputType::Slack {
+        println!("📦 Current output file name: {}", summary_file_name);
+    }
+
     let mut user_input = "".to_string();
 
     if OutputType::Teams == output_type {
         let _user_input: String = Input::with_theme(&ColorfulTheme::default())
-        .with_prompt("Enter a title for the Teams card:")
+        .with_prompt("📝 Enter a title for the Teams card:")
+        .default("A meeting from today...".to_string())
+        .interact_text()
+        .unwrap();
+
+        user_input = _user_input;
+    } 
+
+    if OutputType::TeamsSplit == output_type {
+        let _user_input: String = Input::with_theme(&ColorfulTheme::default())
+        .with_prompt("📝 Enter a title for the Teams card:")
         .default("A meeting from today...".to_string())
         .interact_text()
         .unwrap();
@@ -331,123 +346,41 @@ async fn main() -> Result<()> {
         }
 
         OutputType::Teams => {
-            let client = ReqwestClient::new();
+            send_teams_notification(
+                &settings,
+                &mut spinner,
+                &summarized_text,
+                &user_input,
+                "Summary sent to Teams!",
+            )
+            .await?;
+        }
 
-            let current_date = chrono::Local::now();
-            let formatted_date = current_date.format("%m-%d-%Y %I:%M:%S %p").to_string();
-            let tz = tz::TimeZone::local().expect("Unable to determine timezone");
-            let tz_name = tz.find_current_local_time_type().expect("Could not find local timezone type").time_zone_designation();
-            let date_header = format!("Date: {} {}", formatted_date, tz_name);
+        OutputType::TeamsSplit => {
+            // First write to a file before sending to Teams
+            let ext: &str = ".txt";
+            let outfile = summary_file_name + ext;
+            let output_file_path_txt = Path::new(&outfile);
+            let mut file = File::create(output_file_path_txt)
+                .map_err(|e| anyhow::anyhow!("Error creating file: {}", e))?;
 
-            let teams_webhook_endpoint = settings
-                .get_string("teams.webhook_endpoint")
-                .unwrap_or_default();
+            file.write_all(summarized_text.as_bytes())
+                .map_err(|e| anyhow::anyhow!("Error creating file: {}", e))?;
 
-            if teams_webhook_endpoint.is_empty() {
-                spinner.stop_and_persist(
-                    "⚠️",
-                    "Teams webhook endpoint is not configured. Skipping Teams notification.",
-                );
-                println!("Summary:\n{}\n", summarized_text);
-            } else {
-                let text = format!("{}", summarized_text);
-                let payload = json!({
-                    "type":"message",
-                    "attachments":[
-                       {
-                          "contentType":"application/vnd.microsoft.card.adaptive",
-                          "contentUrl":null,
-                          "content":{
-                             "$schema":"http://adaptivecards.io/schemas/adaptive-card.json",
-                             "type":"AdaptiveCard",
-                             "version":"1.5",
-                             "msteams": {
-                                "width": "Full"
-                              },
-                             "body":[
-                                {
-                                    "type": "ColumnSet",
-                                    "columns": [
-                                        {
-                                            "type": "Column",
-                                            "items": [
-                                                {
-                                                    "type": "Icon",
-                                                    "name": "Flash",
-                                                    "size": "Large",
-                                                    "style": "Filled",
-                                                    "color": "Accent"
-                                                },
-                                            ],
-                                            "width": "auto"
-                                        },
-                                        {
-                                            "type": "Column",
-                                            "spacing": "medium",
-                                            "verticalContentAlignment": "center",
-                                            "items": [
-                                                {
-                                                    "type": "TextBlock",
-                                                    "wrap": true,
-                                                    "style": "heading",
-                                                    "weight": "Bolder",
-                                                    "size": "Large",
-                                                    "text": user_input
-                                                },
-                                            ],
-                                            "width": "auto"
-                                        }
-                                    ]
-                                },
-                                {
-                                    "type": "TextBlock",
-                                    "wrap": true,
-                                    "style": "heading",
-                                    "weight": "Bolder",
-                                    "size": "Medium",
-                                    "text": date_header
-                                },
-                                {
-                                    "type": "Container",
-                                    "showBorder": true,
-                                    "roundedCorners": true,
-                                    "maxHeight": "400px",
-                                    "items": [
-                                        {
-                                            "type": "TextBlock",
-                                            "maxLines": 100,
-                                            "wrap": true,
-                                            "text": text
-                                        }
-                                    ]
-                                }
-                             ]
-                          }
-                       }
-                    ]
-                });
+            println!(
+                "💾 Summary written to {}",
+                output_file_path_txt.display()
+            );
 
-                match client
-                    .post(teams_webhook_endpoint)
-                    .header("Content-Type", "application/json")
-                    .json(&payload)
-                    .send()
-                    .await
-                {
-                    Ok(response) => {
-                        if response.status().is_success() {
-                            spinner.success("Summary sent to Teams!");
-                        } else {
-                            spinner.stop_and_persist("❌", "Failed to send summary to Teams!");
-                            eprintln!("Error sending summary to Teams: {}", response.status());
-                        }
-                    }
-                    Err(err) => {
-                        spinner.stop_and_persist("❌", "Failed to send summary to Teams!");
-                        eprintln!("Error sending summary to Teams: {}", err);
-                    }
-                };
-            }
+            // Send to Teams
+            send_teams_notification(
+                &settings,
+                &mut spinner,
+                &summarized_text,
+                &user_input,
+                "Summary sent to Teams and written to output file!",
+            )
+            .await?;
         }
     }
 
@@ -512,4 +445,134 @@ async fn bucket_region(client: &Client, bucket_name: &str) -> Result<Region> {
     } else {
         Ok(Region::new(location_constraint.as_str().to_owned()))
     }
+}
+
+/// Send a notification to Microsoft Teams
+async fn send_teams_notification(
+    settings: &Config,
+    spinner: &mut Spinner,
+    summarized_text: &str,
+    user_input: &str,
+    success_message: &str,
+) -> Result<()> {
+    let client = ReqwestClient::new();
+
+    let current_date = chrono::Local::now();
+    let formatted_date = current_date.format("%m-%d-%Y %I:%M:%S %p").to_string();
+    let tz = tz::TimeZone::local().expect("Unable to determine timezone");
+    let tz_name = tz.find_current_local_time_type().expect("Could not find local timezone type").time_zone_designation();
+    let date_header = format!("Date: {} {}", formatted_date, tz_name);
+
+    let teams_webhook_endpoint = settings
+        .get_string("teams.webhook_endpoint")
+        .unwrap_or_default();
+
+    if teams_webhook_endpoint.is_empty() {
+        spinner.stop_and_persist(
+            "⚠️",
+            "Teams webhook endpoint is not configured. Skipping Teams notification.",
+        );
+        println!("Summary:\n{}\n", summarized_text);
+        return Ok(());
+    }
+
+    let text = format!("{}", summarized_text);
+    let payload = json!({
+        "type":"message",
+        "attachments":[
+           {
+              "contentType":"application/vnd.microsoft.card.adaptive",
+              "contentUrl":null,
+              "content":{
+                 "$schema":"http://adaptivecards.io/schemas/adaptive-card.json",
+                 "type":"AdaptiveCard",
+                 "version":"1.5",
+                 "msteams": {
+                    "width": "Full"
+                  },
+                 "body":[
+                    {
+                        "type": "ColumnSet",
+                        "columns": [
+                            {
+                                "type": "Column",
+                                "items": [
+                                    {
+                                        "type": "Icon",
+                                        "name": "Flash",
+                                        "size": "Large",
+                                        "style": "Filled",
+                                        "color": "Accent"
+                                    },
+                                ],
+                                "width": "auto"
+                            },
+                            {
+                                "type": "Column",
+                                "spacing": "medium",
+                                "verticalContentAlignment": "center",
+                                "items": [
+                                    {
+                                        "type": "TextBlock",
+                                        "wrap": true,
+                                        "style": "heading",
+                                        "weight": "Bolder",
+                                        "size": "Large",
+                                        "text": user_input
+                                    },
+                                ],
+                                "width": "auto"
+                            }
+                        ]
+                    },
+                    {
+                        "type": "TextBlock",
+                        "wrap": true,
+                        "style": "heading",
+                        "weight": "Bolder",
+                        "size": "Medium",
+                        "text": date_header
+                    },
+                    {
+                        "type": "Container",
+                        "showBorder": true,
+                        "roundedCorners": true,
+                        "maxHeight": "400px",
+                        "items": [
+                            {
+                                "type": "TextBlock",
+                                "maxLines": 100,
+                                "wrap": true,
+                                "text": text
+                            }
+                        ]
+                    }
+                 ]
+              }
+           }
+        ]
+    });
+
+    match client
+        .post(teams_webhook_endpoint)
+        .header("Content-Type", "application/json")
+        .json(&payload)
+        .send()
+        .await
+    {
+        Ok(response) => {
+            if response.status().is_success() {
+                spinner.success(success_message);
+            } else {
+                spinner.stop_and_persist("❌", "Failed to send summary to Teams!");
+                eprintln!("Error sending summary to Teams: {}", response.status());
+            }
+        }
+        Err(err) => {
+            spinner.stop_and_persist("❌", "Failed to send summary to Teams!");
+            eprintln!("Error sending summary to Teams: {}", err);
+        }
+    }
+
+    Ok(())
 }
