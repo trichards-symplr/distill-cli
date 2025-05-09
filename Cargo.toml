@@ -1,6 +1,6 @@
 [package]
 name = "distill-cli"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "Distill CLI can summarize an audio file (e.g., a meeting) using Amazon Transcribe and Amazon Bedrock."
 repository = "TBD"
