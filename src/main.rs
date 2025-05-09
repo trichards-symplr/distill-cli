@@ -3,6 +3,8 @@ mod output;
 mod summarize;
 mod transcribe;
 
+use std::fs::File;
+use std::io::Write;
 use std::path::Path;
 
 use anyhow::{bail, Context, Result};
@@ -254,8 +256,20 @@ async fn main() -> Result<()> {
             .await?;
         }
         OutputType::TeamsSplit => {
-            // First write to a file before sending to Teams
-            output::write_text_file(&summary_file_name, &summarized_text, &mut spinner)?;
+            // First write to a file
+            let ext: &str = ".txt";
+            let outfile = summary_file_name + ext;
+            let output_file_path_txt = Path::new(&outfile);
+            let mut file = File::create(output_file_path_txt)
+                .map_err(|e| anyhow::anyhow!("Error creating file: {}", e))?;
+
+            file.write_all(summarized_text.as_bytes())
+                .map_err(|e| anyhow::anyhow!("Error creating file: {}", e))?;
+
+            println!("\n💾 Summary written to {}", output_file_path_txt.display());
+            
+            // Update spinner for Teams notification
+            spinner.update(spinners::Dots7, "Sending to Teams...", None);
             
             // Send to Teams
             output::send_teams_notification(

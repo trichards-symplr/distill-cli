@@ -20,7 +20,9 @@ pub fn write_text_file(summary_file_name: &str, summarized_text: &str, spinner: 
     file.write_all(summarized_text.as_bytes())
         .map_err(|e| anyhow::anyhow!("Error creating file: {}", e))?;
 
+    // Simply update the spinner with success message
     spinner.success("Done!");
+    
     println!("💾 Summary written to {}", output_file_path.display());
     
     Ok(())
@@ -96,24 +98,27 @@ pub async fn send_slack_notification(
         "content": content
     });
     
-    match client
+    let result = client
         .post(slack_webhook_endpoint)
         .header("Content-Type", "application/json")
         .json(&payload)
         .send()
-        .await
-    {
+        .await;
+        
+    match result {
         Ok(response) => {
             if response.status().is_success() {
                 spinner.success("Summary sent to Slack!");
             } else {
+                let status = response.status();
+                eprintln!("Error sending summary to Slack: {}", status);
                 spinner.stop_and_persist("❌", "Failed to send summary to Slack!");
-                eprintln!("Error sending summary to Slack: {}", response.status());
             }
         }
         Err(err) => {
+            let err_msg = err.to_string();
+            eprintln!("Error sending summary to Slack: {}", err_msg);
             spinner.stop_and_persist("❌", "Failed to send summary to Slack!");
-            eprintln!("Error sending summary to Slack: {}", err);
         }
     }
     
@@ -226,24 +231,27 @@ pub async fn send_teams_notification(
         ]
     });
 
-    match client
+    let result = client
         .post(teams_webhook_endpoint)
         .header("Content-Type", "application/json")
         .json(&payload)
         .send()
-        .await
-    {
+        .await;
+        
+    match result {
         Ok(response) => {
             if response.status().is_success() {
                 spinner.success(success_message);
             } else {
+                let status = response.status();
+                eprintln!("Error sending summary to Teams: {}", status);
                 spinner.stop_and_persist("❌", "Failed to send summary to Teams!");
-                eprintln!("Error sending summary to Teams: {}", response.status());
             }
         }
         Err(err) => {
+            let err_msg = err.to_string();
+            eprintln!("Error sending summary to Teams: {}", err_msg);
             spinner.stop_and_persist("❌", "Failed to send summary to Teams!");
-            eprintln!("Error sending summary to Teams: {}", err);
         }
     }
 
