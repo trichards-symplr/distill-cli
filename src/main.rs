@@ -17,7 +17,7 @@ use spinoff::{spinners, Color, Spinner};
 
 #[derive(Debug, Parser)]
 #[clap(
-    about = "Distill CLI can summarize an audio file (e.g., a meeting) using Amazon Transcribe and Amazon Bedrock.",
+    about = "Distill CLI can summarize an audio file (e.g., a meeting) using Amazon Transcribe and Amazon Bedrock.\n\nNotes:\n- S3 objects are deleted by default!\n- Transcripts are NOT kept, only summaries.",
     after_help = "For supported languages, consult: https://docs.aws.amazon.com/transcribe/latest/dg/supported-languages.html"
 )]
 struct Opt {
