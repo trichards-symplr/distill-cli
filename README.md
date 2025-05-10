@@ -1,22 +1,10 @@
-# Summary
+# Distill CLI
 
-The Distill CLI uses Amazon Transcribe and Amazon Bedrock to create summaries of your audio recordings (e.g., meetings, podcasts, etc.) directly from the command line. It is based on the open source tool: [Amazon Bedrock Audio Summarizer](https://github.com/aws-samples/amazon-bedrock-audio-summarizer).
+Distill CLI is a tool for transcribing and summarizing audio files using AWS services. It leverages Amazon Transcribe for speech-to-text conversion and Amazon Bedrock's AI models for summarization.
 
-# Supported audio formats
+## Supported AWS Regions
 
-Like the [Amazon Bedrock Audio Summarizer](https://github.com/aws-samples/amazon-bedrock-audio-summarizer), the Distill CLI takes a dependency on Amazon Transcribe, and as such, supports the following [media formats](https://docs.aws.amazon.com/transcribe/latest/dg/how-input.html#how-input-audio): AMR, FLAC, M4A, MP3, MP4, Ogg, WebM, WAV.
-
-# Language Support
-
-Distill CLI supports configurable language codes for transcription using Amazon Transcribe. Specify the language of the audio file with the `--language-code` or `-l` parameter, e.g., `--language-code es-US` for Spanish (United States). If no language code is provided, it defaults to English (United States) (`en-US`). For a list of supported languages and their codes, see the [Amazon Transcribe Supported Languages Documentation](https://docs.aws.amazon.com/transcribe/latest/dg/supported-languages.html). Use `--help` for more information on available options. The prompt in the provided config.toml is adjusted so that the provided output matches the language in the transcript.f
-
-# S3 Object Deletion
-
-Distill CLI supports the deletion of audio recordings after transcription and summarization activities have completed. Using the `--delete-s3-object` or `-d` parameter (e.g., `--delete-s3-object Y`), the audio file previously uploaded onto Amazon S3 will be deleted. Use `--help` for more information on available options.
-
-# A note on regions
-
-By default, the Distill CLI inherits credentials and configuration details from the AWS CLI. Since Bedrock is not yet available in every region, ensure that the default region in your AWS config is on the list of [supported Bedrock regions](https://docs.aws.amazon.com/bedrock/latest/userguide/bedrock-regions.html). 
+Make sure your default region in your AWS config is on the list of [supported Bedrock regions](https://docs.aws.amazon.com/bedrock/latest/userguide/bedrock-regions.html). 
 
 **Note**: If no region is set in your AWS CLI config, the Distill CLI will default to `us-east-1`.
 
@@ -103,19 +91,50 @@ Key action items and follow-ups:
 ...
 ```
 
-# Options 
+## Application Flow
 
-As this is a simple CLI, there are only a few options.
+When you run Distill CLI, it follows this process:
+
+1. **Parse Arguments**: Processes your command-line options
+2. **Load Configuration**: Reads settings from `config.toml`
+3. **Select S3 Bucket**: Uses the bucket from config or prompts you to choose one
+4. **Upload Audio**: Sends your audio file to the selected S3 bucket
+5. **Transcribe Audio**: Uses Amazon Transcribe to convert speech to text
+6. **Summarize Text**: Uses Amazon Bedrock to create a concise summary
+7. **Save Transcript** (Optional): Saves the full transcript if `--save-transcript` is specified
+8. **Process Output**: Delivers the summary in your chosen format
+9. **Cleanup**: Optionally deletes the S3 object based on `--delete-s3-object`
+
+# Command Line Options 
 
 | Option | Required | Description |
 | - | - | - |
 | `-i`, `--input-audio-file` | Yes | Specify the audio file to be summarized. | 
-| `-o`, `--output-type` | No | Specify the output format of the summary. Default is terminal.<br> **Accepted values**: `terminal`, `text`, `word`, `markdown`, `slack`, `teams` |
+| `-o`, `--output-type` | No | Specify the output format of the summary. Default is `terminal`.<br> **Accepted values**: `terminal`, `text`, `word`, `markdown`, `slack`, `slacksplit`, `teams`, `teamssplit` |
+| `-s`, `--summary-file-name` | No | Base name for output files (without extension). Default is `summarized_output`. |
 | `-l`, `--language-code` | No | Input language code. Default is `en-US`.<br> **Accepted values**: Check: [Amazon Transcribe Supported Languages Documentation](https://docs.aws.amazon.com/transcribe/latest/dg/supported-languages.html) | 
+| `-d`, `--delete-s3-object` | No | Whether to delete the S3 object after processing. Default is `Y`. Set to `N` to keep files in S3. |
+| `-t`, `--save-transcript` | No | Save the full transcript to a `.trans` file alongside the summary. |
 | `-h`, `--help` | No | Provides help for the Distill CLI. |
 
+## Output Types Explained
 
-Note: For the **MS Teams** output type, you will be asked for a short title that will be used when creating the AdaptiveCard. To use MS Teams, you will need to craete a workflow in Teams that will post to a chat or channel webhook. Copy that webhook into the Teams section of the **config.toml** file.
+- **Terminal**: Displays the summary in the console (default)
+- **Text**: Writes the summary to a `.txt` file
+- **Word**: Creates a Microsoft Word (`.docx`) document with the summary
+- **Markdown**: Creates a `.md` file with formatted summary
+- **Slack**: Sends the summary to a Slack webhook
+- **SlackSplit**: Writes the summary to a `.txt` file AND sends it to Slack
+- **Teams**: Sends the summary as an adaptive card to Microsoft Teams
+- **TeamsSplit**: Writes the summary to a `.txt` file AND sends it to Teams
+
+### Teams and Slack Integration
+
+For the **Teams** and **TeamsSplit** output types, you will be asked for a short title that will be used when creating the AdaptiveCard. 
+
+To use Microsoft Teams, you will need to create a workflow in Teams that will post to a chat or channel webhook. Copy that webhook into the Teams section of the **config.toml** file.
+
+Similarly, for Slack integration, you'll need to create a [Slack webhook](https://api.slack.com/messaging/webhooks) and add it to your `config.toml`.
 
 # Config settings
 
