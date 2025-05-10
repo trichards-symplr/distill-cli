@@ -1,15 +1,17 @@
-/*
- * Transcribe Module
- * 
- * This module handles the audio transcription functionality using Amazon Transcribe:
- * - Detects the audio file format
- * - Creates and monitors transcription jobs
- * - Retrieves and processes the transcription results
- * 
- * The module abstracts away the complexities of working with the Amazon Transcribe service
- * and provides a simple interface for converting audio files to text. It handles various
- * audio formats and supports different language options.
- */
+//! # Transcribe Module
+//!
+//! This module handles the audio transcription functionality using Amazon Transcribe:
+//! - Detects the audio file format
+//! - Creates and monitors transcription jobs
+//! - Retrieves and processes the transcription results
+//!
+//! The module abstracts away the complexities of working with the Amazon Transcribe service
+//! and provides a simple interface for converting audio files to text. It handles various
+//! audio formats and supports different language options.
+//!
+//! ## Usage
+//! This module is typically used by the main application to convert audio files to text
+//! before summarization. It requires AWS credentials and an S3 bucket to store the audio file.
 
 use aws_config::SdkConfig;
 use aws_sdk_transcribe::types::{
@@ -27,7 +29,8 @@ use uuid::Uuid;
 
 /// Transcribes an audio file using Amazon Transcribe
 ///
-/// # Parameters
+/// # Arguments
+///
 /// * `config` - AWS SDK configuration
 /// * `file_path` - Path to the local audio file (used for format detection)
 /// * `s3_uri` - S3 URI where the audio file is stored
@@ -35,13 +38,11 @@ use uuid::Uuid;
 /// * `language_code` - Language code for transcription (e.g., "en-US")
 ///
 /// # Returns
-/// * `Result<String, Error>` - The transcribed text or an error
 ///
-/// # Process
-/// 1. Detects the audio file format
-/// 2. Creates a transcription job with Amazon Transcribe
-/// 3. Polls the job status until completion
-/// 4. Retrieves and processes the transcription results
+/// A Result containing the transcribed text or an error
+///
+/// Detects the audio file format, creates a transcription job with Amazon Transcribe,
+/// polls the job status until completion, and retrieves and processes the transcription results.
 pub async fn transcribe_audio(
     config: &SdkConfig,
     file_path: &Path,
@@ -293,17 +294,16 @@ pub async fn transcribe_audio(
 
 /// Converts Amazon Transcribe JSON output to a readable text format
 ///
-/// # Parameters
+/// # Arguments
+///
 /// * `json_string` - The JSON string returned by Amazon Transcribe
 ///
 /// # Returns
-/// * `Result<String, Error>` - Formatted transcript text with speaker labels or an error
 ///
-/// # Process
-/// 1. Parses the JSON response from Amazon Transcribe
-/// 2. Extracts words, punctuation, and speaker labels
-/// 3. Formats the transcript with speaker labels and proper spacing
-/// 4. Returns the formatted transcript as a string
+/// A Result containing formatted transcript text with speaker labels or an error
+///
+/// Parses the JSON response from Amazon Transcribe, extracts words, punctuation,
+/// and speaker labels, and formats the transcript with speaker labels and proper spacing.
 pub fn convert_transcribe_json(json_string: &str) -> Result<String, Error> {
     let v: Value = serde_json::from_str(json_string).with_context(|| "Failed to parse JSON")?;
 

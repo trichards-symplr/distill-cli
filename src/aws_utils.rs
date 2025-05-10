@@ -1,14 +1,22 @@
-/*
- * AWS Utilities Module
- * 
- * This module provides utility functions for interacting with AWS services:
- * - Loading and configuring the AWS SDK
- * - Listing available S3 buckets
- * - Determining the region for a specific S3 bucket
- * 
- * These functions abstract away the details of AWS API interactions and provide
- * a simpler interface for the main application to use.
- */
+//! # AWS Utilities Module
+//!
+//! This module provides utility functions for interacting with AWS services:
+//! - Loading and configuring the AWS SDK
+//! - Listing available S3 buckets
+//! - Determining the region for a specific S3 bucket
+//!
+//! These functions abstract away the details of AWS API interactions and provide
+//! a simpler interface for the main application to use.
+//!
+//! ## Authentication
+//! This module relies on AWS credentials being available through:
+//! - Environment variables
+//! - AWS credentials file (~/.aws/credentials)
+//! - IAM roles for EC2 or ECS
+//!
+//! ## Usage
+//! These utilities are used throughout the application to interact with AWS services,
+//! particularly for S3 operations and regional configuration.
 
 use anyhow::{Context, Result};
 use aws_config::meta::region::RegionProviderChain;
@@ -18,16 +26,17 @@ use aws_sdk_s3::Client;
 
 /// Loads and configures the AWS SDK with appropriate settings
 ///
-/// # Parameters
+/// # Arguments
+///
 /// * `region` - Optional AWS region to use; if None, uses the default provider chain or falls back to us-east-1
 ///
 /// # Returns
-/// * `SdkConfig` - Configured AWS SDK configuration
 ///
-/// # Details
-/// - Configures the AWS SDK using environment variables and credentials files
-/// - Sets the specified region or uses the default provider chain
-/// - Disables stalled stream protection to resolve issues with large S3 file uploads
+/// Configured AWS SDK configuration
+///
+/// Configures the AWS SDK using environment variables and credentials files.
+/// Sets the specified region or uses the default provider chain.
+/// Disables stalled stream protection to resolve issues with large S3 file uploads.
 pub async fn load_config(region: Option<Region>) -> SdkConfig {
     let mut config = aws_config::from_env();
     match region {
@@ -49,16 +58,16 @@ pub async fn load_config(region: Option<Region>) -> SdkConfig {
 
 /// Lists all S3 buckets available to the authenticated user
 ///
-/// # Parameters
+/// # Arguments
+///
 /// * `client` - AWS S3 client instance
 ///
 /// # Returns
-/// * `Result<Vec<String>, Error>` - List of bucket names or an error
 ///
-/// # Details
-/// - Makes an API call to S3 to list all buckets
-/// - Extracts the bucket names from the response
-/// - Returns the names as a vector of strings
+/// A Result containing a vector of bucket names or an error
+///
+/// Makes an API call to S3 to list all buckets, extracts the bucket names
+/// from the response, and returns them as a vector of strings.
 pub async fn list_buckets(client: &Client) -> Result<Vec<String>> {
     let resp = client.list_buckets().send().await?;
     let buckets = resp.buckets();
@@ -73,17 +82,18 @@ pub async fn list_buckets(client: &Client) -> Result<Vec<String>> {
 
 /// Determines the AWS region for a specific S3 bucket
 ///
-/// # Parameters
+/// # Arguments
+///
 /// * `client` - AWS S3 client instance
 /// * `bucket_name` - Name of the S3 bucket to check
 ///
 /// # Returns
-/// * `Result<Region, Error>` - The bucket's region or an error
 ///
-/// # Details
-/// - Makes an API call to get the bucket's location constraint
-/// - Handles the special case where an empty location constraint means us-east-1
-/// - Returns a Region object that can be used to configure region-specific clients
+/// A Result containing the bucket's region or an error
+///
+/// Makes an API call to get the bucket's location constraint and handles
+/// the special case where an empty location constraint means us-east-1.
+/// Returns a Region object that can be used to configure region-specific clients.
 pub async fn bucket_region(client: &Client, bucket_name: &str) -> Result<Region> {
     let resp = client
         .get_bucket_location()

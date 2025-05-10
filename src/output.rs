@@ -1,15 +1,22 @@
-/*
- * Output Module
- * 
- * This module handles all output operations for the Distill CLI application:
- * - Writing summaries to different file formats (text, Word, Markdown)
- * - Sending notifications to communication platforms (Slack, Teams)
- * 
- * Each function in this module takes care of a specific output format or notification
- * channel, handling the formatting, file creation, or API communication as needed.
- * The module provides a consistent interface for the main application to use regardless
- * of the output destination.
- */
+//! # Output Module
+//!
+//! This module handles all output operations for the Distill CLI application:
+//! - Writing summaries to different file formats (text, Word, Markdown)
+//! - Sending notifications to communication platforms (Slack, Teams)
+//!
+//! Each function in this module takes care of a specific output format or notification
+//! channel, handling the formatting, file creation, or API communication as needed.
+//! The module provides a consistent interface for the main application to use regardless
+//! of the output destination.
+//!
+//! ## Configuration
+//! The notification functions rely on webhook URLs configured in config.toml:
+//! - `slack.webhook_endpoint` for Slack notifications
+//! - `teams.webhook_endpoint` for Teams notifications
+//!
+//! ## Usage
+//! This module is used at the end of the processing pipeline to deliver the
+//! summarized content in the user's preferred format.
 
 use std::fs::File;
 use std::io::Write;
@@ -24,19 +31,19 @@ use spinoff::Spinner;
 
 /// Writes summary content to a text file
 ///
-/// # Parameters
+/// # Arguments
+///
 /// * `summary_file_name` - Base name for the output file (without extension)
 /// * `summarized_text` - The text content to write to the file
 /// * `spinner` - Progress spinner to update upon completion
 ///
 /// # Returns
-/// * `Result<(), Error>` - Success or an error
 ///
-/// # Details
-/// - Creates a text file with the provided name and .txt extension
-/// - Writes the summarized text to the file
-/// - Updates the spinner to indicate completion
-/// - Displays a confirmation message with the file path
+/// A Result indicating success or an error
+///
+/// Creates a text file with the provided name and .txt extension,
+/// writes the summarized text to the file, and updates the spinner
+/// to indicate completion.
 pub fn write_text_file(summary_file_name: &str, summarized_text: &str, spinner: &mut Spinner) -> Result<()> {
     let ext = ".txt";
     let outfile = summary_file_name.to_owned() + ext;
@@ -57,20 +64,18 @@ pub fn write_text_file(summary_file_name: &str, summarized_text: &str, spinner: 
 
 /// Writes summary content to a Microsoft Word document
 ///
-/// # Parameters
+/// # Arguments
+///
 /// * `summary_file_name` - Base name for the output file (without extension)
 /// * `summarized_text` - The text content to write to the file
 /// * `spinner` - Progress spinner to update upon completion
 ///
 /// # Returns
-/// * `Result<(), Error>` - Success or an error
 ///
-/// # Details
-/// - Creates a Word document (.docx) with the provided name
-/// - Formats the content using docx-rs library
-/// - Adds the summarized text as paragraphs in the document
-/// - Updates the spinner to indicate completion
-/// - Displays a confirmation message with the file path
+/// A Result indicating success or an error
+///
+/// Creates a Word document (.docx) with the provided name, formats the content
+/// using docx-rs library, and adds the summarized text as paragraphs in the document.
 pub fn write_word_file(summary_file_name: &str, summarized_text: &str, spinner: &mut Spinner) -> Result<()> {
     let ext = ".docx";
     let outfile = summary_file_name.to_owned() + ext;
@@ -96,20 +101,18 @@ pub fn write_word_file(summary_file_name: &str, summarized_text: &str, spinner: 
 
 /// Writes summary content to a Markdown file
 ///
-/// # Parameters
+/// # Arguments
+///
 /// * `summary_file_name` - Base name for the output file (without extension)
 /// * `summarized_text` - The text content to write to the file
 /// * `spinner` - Progress spinner to update upon completion
 ///
 /// # Returns
-/// * `Result<(), Error>` - Success or an error
 ///
-/// # Details
-/// - Creates a Markdown file with the provided name and .md extension
-/// - Formats the content with Markdown syntax, adding a header
-/// - Writes the formatted content to the file
-/// - Updates the spinner to indicate completion
-/// - Displays a confirmation message with the file path
+/// A Result indicating success or an error
+///
+/// Creates a Markdown file with the provided name and .md extension,
+/// formats the content with Markdown syntax, and adds a header.
 pub fn write_markdown_file(summary_file_name: &str, summarized_text: &str, spinner: &mut Spinner) -> Result<()> {
     let ext = ".md";
     let outfile = summary_file_name.to_owned() + ext;
@@ -131,20 +134,18 @@ pub fn write_markdown_file(summary_file_name: &str, summarized_text: &str, spinn
 
 /// Sends a summary notification to Slack via webhook
 ///
-/// # Parameters
+/// # Arguments
+///
 /// * `settings` - Application configuration containing the Slack webhook URL
 /// * `spinner` - Progress spinner to update during the process
 /// * `summarized_text` - The text content to send to Slack
 ///
 /// # Returns
-/// * `Result<(), Error>` - Success or an error
 ///
-/// # Details
-/// - Retrieves the Slack webhook URL from settings
-/// - Formats the summary as a Slack message
-/// - Sends the message to the webhook endpoint
-/// - Handles success and error responses
-/// - Updates the spinner to indicate completion or failure
+/// A Result indicating success or an error
+///
+/// Retrieves the Slack webhook URL from settings, formats the summary as a Slack message,
+/// and sends the message to the webhook endpoint.
 pub async fn send_slack_notification(
     settings: &Config,
     spinner: &mut Spinner,
@@ -199,7 +200,8 @@ pub async fn send_slack_notification(
 
 /// Sends a summary notification to Microsoft Teams via webhook
 ///
-/// # Parameters
+/// # Arguments
+///
 /// * `settings` - Application configuration containing the Teams webhook URL
 /// * `spinner` - Progress spinner to update during the process
 /// * `summarized_text` - The text content to send to Teams
@@ -207,15 +209,11 @@ pub async fn send_slack_notification(
 /// * `success_message` - Message to display on successful delivery
 ///
 /// # Returns
-/// * `Result<(), Error>` - Success or an error
 ///
-/// # Details
-/// - Retrieves the Teams webhook URL from settings
-/// - Gets the current date and timezone for the card header
-/// - Creates an adaptive card with the summary content
-/// - Sends the card to the Teams webhook endpoint
-/// - Handles success and error responses
-/// - Updates the spinner with the provided success message or an error
+/// A Result indicating success or an error
+///
+/// Retrieves the Teams webhook URL from settings, creates an adaptive card with the summary content,
+/// and sends the card to the Teams webhook endpoint.
 pub async fn send_teams_notification(
     settings: &Config,
     spinner: &mut Spinner,
