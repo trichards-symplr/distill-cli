@@ -17,7 +17,7 @@ use spinoff::{spinners, Color, Spinner};
 
 #[derive(Debug, Parser)]
 #[clap(
-    about = "Distill CLI can summarize an audio file (e.g., a meeting) using Amazon Transcribe and Amazon Bedrock.\n\nNotes:\n- S3 objects are deleted by default!\n- Transcripts are NOT kept, only summaries.",
+    about = "Distill CLI can summarize an audio file (e.g., a meeting) using Amazon Transcribe and Amazon Bedrock.\n\nNotes:\n- S3 objects are deleted by default!\n- Use --save-transcript to keep the full transcript.",
     after_help = "For supported languages, consult: https://docs.aws.amazon.com/transcribe/latest/dg/supported-languages.html"
 )]
 struct Opt {
@@ -41,6 +41,9 @@ struct Opt {
 
     #[clap(short, long, default_value = "Y")]
     delete_s3_object: String,
+    
+    #[clap(short = 't', long, help = "Save the full transcript to a .trans file")]
+    save_transcript: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
@@ -134,6 +137,7 @@ async fn main() -> Result<()> {
         summary_file_name,
         language_code,
         delete_s3_object,
+        save_transcript,
     } = Opt::parse();
     
     // Load AWS config
@@ -237,6 +241,20 @@ async fn main() -> Result<()> {
     // Summarize the transcription
     spinner.update(spinners::Dots7, "Summarizing text...", None);
     let summarized_text = summarize::summarize_text(&config, &transcription, &mut spinner).await?;
+    
+    // Save transcript if requested
+    if save_transcript {
+        let trans_ext = ".trans";
+        let trans_file = summary_file_name.clone() + trans_ext;
+        let trans_path = Path::new(&trans_file);
+        let mut trans_file = File::create(trans_path)
+            .map_err(|e| anyhow::anyhow!("Error creating transcript file: {}", e))?;
+            
+        trans_file.write_all(transcription.as_bytes())
+            .map_err(|e| anyhow::anyhow!("Error writing transcript file: {}", e))?;
+            
+        println!("📝 Full transcript saved to {}", trans_path.display());
+    }
 
     // Process output based on selected output type
     match output_type {

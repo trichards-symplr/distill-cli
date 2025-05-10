@@ -74,6 +74,18 @@ activate Sum
 Sum --> Main: summary text
 deactivate Sum
 
+alt #Gold save_transcript is true
+    Main -> File: create transcript file (.trans)
+    activate File
+    File --> Main: file handle
+    deactivate File
+    Main -> File: write transcription
+    activate File
+    File --> Main: write result
+    deactivate File
+    Main -> Main: display transcript saved message
+end
+
 alt #LightBlue OutputType::Word
     Main -> Out: write_word_file()
     activate Out
@@ -142,7 +154,7 @@ else #LightSalmon OutputType::SlackSplit
     deactivate Slack
     Out --> Main: notification result
     deactivate Out
-else #LightCoral OutputType::Teams
+else #LightSkyBlue OutputType::Teams
     Main -> Out: send_teams_notification()
     activate Out
     alt #White teams webhook configured
@@ -156,7 +168,7 @@ else #LightCoral OutputType::Teams
     end
     Out --> Main: notification result
     deactivate Out
-else #LightSkyBlue OutputType::TeamsSplit
+else #LightSeaGreen OutputType::TeamsSplit
     Main -> File: create text file
     activate File
     File --> Main: file created

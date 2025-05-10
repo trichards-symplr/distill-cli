@@ -6,6 +6,7 @@ class Opt {
   - summary_file_name: String
   - language_code: String
   - delete_s3_object: String
+  - save_transcript: bool
 }
 
 enum OutputType {
@@ -22,6 +23,7 @@ enum OutputType {
 class Main {
   - get_teams_card_title(): String
   - select_bucket(s3_client: &Client, s3_bucket_name: &str): Result<String>
+  - load_settings(): Result<Config>
   + main(): Result<()>
 }
 
