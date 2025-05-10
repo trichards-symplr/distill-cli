@@ -1,3 +1,23 @@
+/*
+ * Distill CLI - A tool for transcribing and summarizing audio files
+ * 
+ * This is the main entry point for the Distill CLI application. The application flow is:
+ * 1. Parse command-line arguments
+ * 2. Load AWS configuration and application settings
+ * 3. Select or validate the S3 bucket for file storage
+ * 4. Upload the audio file to S3
+ * 5. Transcribe the audio using Amazon Transcribe
+ * 6. Summarize the transcription using Amazon Bedrock
+ * 7. Process the output based on the selected output type
+ * 8. Optionally delete the S3 object
+ * 
+ * The application is organized into the following modules:
+ * - aws_utils: Handles AWS configuration, S3 bucket operations, and region detection
+ * - transcribe: Manages the audio transcription process using Amazon Transcribe
+ * - summarize: Handles text summarization using Amazon Bedrock
+ * - output: Provides functions for different output formats (text, Word, Markdown) and notifications (Slack, Teams)
+ */
+
 mod aws_utils;
 mod output;
 mod summarize;
@@ -58,7 +78,16 @@ enum OutputType {
     TeamsSplit,
 }
 
-/// Get Teams card title from user input
+/// Prompts the user to enter a title for the Teams card
+///
+/// # Returns
+/// * `String` - The title entered by the user or a default value
+///
+/// # Details
+/// - Displays a prompt for the user to enter a title
+/// - Provides a default value ("A meeting from today...")
+/// - Handles input errors by falling back to the default value
+/// - Returns the entered title or the default if an error occurs
 fn get_teams_card_title() -> String {
     Input::with_theme(&ColorfulTheme::default())
         .with_prompt("📝 Enter a title for the Teams card:")
@@ -67,7 +96,20 @@ fn get_teams_card_title() -> String {
         .unwrap_or_else(|_| "A meeting from today...".to_string())
 }
 
-/// Select or validate S3 bucket
+/// Selects or validates an S3 bucket for file storage
+///
+/// # Parameters
+/// * `s3_client` - AWS S3 client instance
+/// * `s3_bucket_name` - Optional preconfigured bucket name from settings
+///
+/// # Returns
+/// * `Result<String, Error>` - Selected bucket name or an error
+///
+/// # Details
+/// - Checks if the provided bucket name exists in the user's account
+/// - If the bucket exists, uses it
+/// - If the bucket doesn't exist or none was provided, shows a selection menu
+/// - Returns the selected bucket name or an error if no valid bucket is found
 async fn select_bucket(s3_client: &Client, s3_bucket_name: &str) -> Result<String> {
     let resp = &aws_utils::list_buckets(s3_client).await;
     let mut bucket_name = String::new();
@@ -118,7 +160,15 @@ async fn select_bucket(s3_client: &Client, s3_bucket_name: &str) -> Result<Strin
     Ok(bucket_name)
 }
 
-/// Load application settings from config.toml
+/// Loads application settings from the config.toml file
+///
+/// # Returns
+/// * `Result<Config, Error>` - Loaded configuration or an error
+///
+/// # Details
+/// - Attempts to load the config.toml file from the current directory
+/// - Parses the configuration into a Config object
+/// - Provides a descriptive error message if the file is missing or invalid
 fn load_settings() -> Result<Config> {
     Config::builder()
         .add_source(ConfigFile::with_name("./config.toml"))

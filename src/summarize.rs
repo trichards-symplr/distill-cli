@@ -1,3 +1,16 @@
+/*
+ * Summarize Module
+ * 
+ * This module handles the text summarization functionality using Amazon Bedrock:
+ * - Connects to the Amazon Bedrock service
+ * - Formats the transcription text for the AI model
+ * - Sends the text to the model for summarization
+ * - Processes and returns the summarized text
+ * 
+ * The module abstracts away the details of working with the AI model and provides
+ * a simple interface for generating summaries from transcription text.
+ */
+
 use aws_config::SdkConfig;
 use aws_sdk_bedrockruntime::{primitives::Blob, Client};
 
@@ -8,6 +21,21 @@ use serde_json::json;
 use spinoff::Spinner;
 use std::str::from_utf8;
 
+/// Summarizes transcribed text using Amazon Bedrock's AI models
+///
+/// # Parameters
+/// * `config` - AWS SDK configuration
+/// * `transcribed_text` - The text to summarize, typically from a transcription
+/// * `spinner` - Progress spinner to update during the summarization process
+///
+/// # Returns
+/// * `Result<String, Error>` - The summarized text or an error
+///
+/// # Process
+/// 1. Loads the prompt template and model settings from config.toml
+/// 2. Formats the prompt with the transcribed text
+/// 3. Sends the prompt to the Amazon Bedrock model (default: Claude)
+/// 4. Processes the response and extracts the summarized text
 pub async fn summarize_text(
     config: &SdkConfig,
     transcribed_text: &str,
