@@ -6,7 +6,7 @@
 //! 1. Parse command-line arguments
 //! 2. Load AWS configuration and application settings
 //! 3. Select or validate the S3 bucket for file storage
-//! 4. Upload the audio file to S3
+//! 4. Upload the audio file to S3 with server-side encryption (AES-256)
 //! 5. Transcribe the audio using Amazon Transcribe
 //! 6. Summarize the transcription using Amazon Bedrock
 //! 7. Optionally save the full transcript
@@ -295,6 +295,7 @@ async fn main() -> Result<()> {
         .bucket(&bucket_name)
         .key(&file_name)
         .body(body)
+        .server_side_encryption(aws_sdk_s3::types::ServerSideEncryption::Aes256)
         .send()
         .await
         .context("Failed to upload to S3")?;

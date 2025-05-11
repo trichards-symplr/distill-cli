@@ -98,7 +98,7 @@ When you run Distill CLI, it follows this process:
 1. **Parse Arguments**: Processes your command-line options
 2. **Load Configuration**: Reads settings from `config.toml`
 3. **Select S3 Bucket**: Uses the bucket from config or prompts you to choose one
-4. **Upload Audio**: Sends your audio file to the selected S3 bucket
+4. **Upload Audio**: Sends your audio file to the selected S3 bucket with server-side encryption (AES-256)
 5. **Transcribe Audio**: Uses Amazon Transcribe to convert speech to text
 6. **Summarize Text**: Uses Amazon Bedrock to create a concise summary
 7. **Save Transcript** (Optional): Saves the full transcript if `--save-transcript` is specified
@@ -250,7 +250,10 @@ Two scripts have been provided that can be found under the **src/scripts** folde
 
 ## Security
 
-See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more information.
+- All data uploaded to S3 is automatically encrypted using AES-256 server-side encryption
+- Data in transit is protected using HTTPS connections provided by the AWS SDK
+- Webhook URLs for Slack and Teams should be treated as sensitive information and not committed to version control
+- For security issue notifications and reporting vulnerabilities, see [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications)
 
 ## License
 
