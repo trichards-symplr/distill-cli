@@ -9,9 +9,9 @@
 //! 4. Upload the audio file to S3 with server-side encryption (AES-256)
 //! 5. Transcribe the audio using Amazon Transcribe
 //! 6. Summarize the transcription using Amazon Bedrock
-//! 7. Optionally save the full transcript
-//! 8. Process the output based on the selected output type
-//! 9. Optionally delete the S3 object
+//! 7. Process the output based on the selected output type
+//! 8. Optionally delete the S3 object
+//! 9. Optionally save the full transcript
 //!
 //! ## Modules
 //! The application is organized into the following modules:
@@ -318,28 +318,14 @@ async fn main() -> Result<()> {
     // Summarize the transcription
     spinner.update(spinners::Dots7, "Summarizing text...", None);
     let summarized_text = summarize::summarize_text(&config, &transcription, &mut spinner).await?;
-    
-    // Save transcript if requested
-    if save_transcript {
-        let trans_ext = ".trans";
-        let trans_file = summary_file_name.clone() + trans_ext;
-        let trans_path = Path::new(&trans_file);
-        let mut trans_file = File::create(trans_path)
-            .map_err(|e| anyhow::anyhow!("Error creating transcript file: {}", e))?;
-            
-        trans_file.write_all(transcription.as_bytes())
-            .map_err(|e| anyhow::anyhow!("Error writing transcript file: {}", e))?;
-            
-        println!("📝 Full transcript saved to {}", trans_path.display());
-    }
 
     // Process output based on selected output type
     match output_type {
         OutputType::Word => {
-            output::write_word_file(&summary_file_name, &summarized_text, &mut spinner)?;
+            output::write_word_file(&summary_file_name.clone(), &summarized_text, &mut spinner)?;
         }
         OutputType::Text => {
-            output::write_text_file(&summary_file_name, &summarized_text, &mut spinner)?;
+            output::write_text_file(&summary_file_name.clone(), &summarized_text, &mut spinner)?;
         }
         OutputType::Terminal => {
             spinner.success("Done!");
@@ -347,7 +333,7 @@ async fn main() -> Result<()> {
             println!("Summary:\n{}\n", summarized_text);
         }
         OutputType::Markdown => {
-            output::write_markdown_file(&summary_file_name, &summarized_text, &mut spinner)?;
+            output::write_markdown_file(&summary_file_name.clone(), &summarized_text, &mut spinner)?;
         }
         OutputType::Slack => {
             output::send_slack_notification(&settings, &mut spinner, &summarized_text).await?;
@@ -355,7 +341,7 @@ async fn main() -> Result<()> {
         OutputType::SlackSplit => {
             // First write to a file
             let ext: &str = ".txt";
-            let outfile = summary_file_name + ext;
+            let outfile = summary_file_name.clone() + ext;
             let output_file_path_txt = Path::new(&outfile);
             let mut file = File::create(output_file_path_txt)
                 .map_err(|e| anyhow::anyhow!("Error creating file: {}", e))?;
@@ -384,7 +370,7 @@ async fn main() -> Result<()> {
         OutputType::TeamsSplit => {
             // First write to a file
             let ext: &str = ".txt";
-            let outfile = summary_file_name + ext;
+            let outfile = summary_file_name.clone() + ext;
             let output_file_path_txt = Path::new(&outfile);
             let mut file = File::create(output_file_path_txt)
                 .map_err(|e| anyhow::anyhow!("Error creating file: {}", e))?;
@@ -417,6 +403,20 @@ async fn main() -> Result<()> {
             .key(&file_name)
             .send()
             .await?;
+    }
+    
+    // Save transcript if requested (as the last operation)
+    if save_transcript {
+        let trans_ext = ".trans";
+        let trans_file = summary_file_name.clone() + trans_ext;
+        let trans_path = Path::new(&trans_file);
+        let mut trans_file = File::create(trans_path)
+            .map_err(|e| anyhow::anyhow!("Error creating transcript file: {}", e))?;
+            
+        trans_file.write_all(transcription.as_bytes())
+            .map_err(|e| anyhow::anyhow!("Error writing transcript file: {}", e))?;
+            
+        println!("📝 Full transcript saved to {}", trans_path.display());
     }
 
     Ok(())

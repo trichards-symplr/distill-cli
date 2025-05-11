@@ -101,9 +101,9 @@ When you run Distill CLI, it follows this process:
 4. **Upload Audio**: Sends your audio file to the selected S3 bucket with server-side encryption (AES-256)
 5. **Transcribe Audio**: Uses Amazon Transcribe to convert speech to text
 6. **Summarize Text**: Uses Amazon Bedrock to create a concise summary
-7. **Save Transcript** (Optional): Saves the full transcript if `--save-transcript` is specified
-8. **Process Output**: Delivers the summary in your chosen format
-9. **Cleanup**: Optionally deletes the S3 object based on `--delete-s3-object`
+7. **Process Output**: Delivers the summary in your chosen format
+8. **Cleanup**: Optionally deletes the S3 object based on `--delete-s3-object`
+9. **Save Transcript** (Optional): Saves the full transcript if `--save-transcript` is specified
 
 # Command Line Options 
 
