@@ -2,6 +2,26 @@
 
 Distill CLI is a tool for transcribing and summarizing audio files using AWS services. It leverages Amazon Transcribe for speech-to-text conversion and Amazon Bedrock's AI models for summarization.
 
+## Table of Contents
+
+- [Supported AWS Regions](#supported-aws-regions)
+- [Install the Distill CLI](#install-the-distill-cli)
+  - [Prerequisites](#prerequisites)
+  - [Step 1: Clone the repo](#step-1-clone-the-repo)
+  - [Step 2: Build from source](#step-2-build-from-source)
+- [Usage](#usage)
+  - [Application Flow](#application-flow)
+- [Command Line Options](#command-line-options)
+  - [Output Types Explained](#output-types-explained)
+  - [Teams and Slack Integration](#teams-and-slack-integration)
+- [Config settings](#config-settings)
+  - [How to adjust model values](#how-to-adjust-model-values)
+  - [Supported Bedrock models](#supported-bedrock-models)
+  - [Additional output settings](#additional-output-settings)
+- [Automation](#automation)
+- [Security](#security)
+- [License](#license)
+
 ## Supported AWS Regions
 
 Make sure your default region in your AWS config is on the list of [supported Bedrock regions](https://docs.aws.amazon.com/bedrock/latest/userguide/bedrock-regions.html). 
