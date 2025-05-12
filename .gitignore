@@ -7,6 +7,5 @@ Cargo.lock
 *.m4a
 *.txt
 *.docx
-*.md
 target
 *.lock
