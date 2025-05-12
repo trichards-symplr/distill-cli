@@ -21,6 +21,9 @@ Distill CLI is a tool for transcribing and summarizing audio files using AWS ser
 - [Automation](#automation)
 - [Security](#security)
 - [License](#license)
+- [Diagrams](#diagrams)
+  - [Application Architecture](#application-architecture)
+  - [Spinner Management Flow](#spinner-management-flow)
 
 ## Supported AWS Regions
 
@@ -312,3 +315,31 @@ Two scripts have been provided that can be found under the **src/scripts** folde
 ## License
 
 This project is licensed under the Apache-2.0 License.
+
+## Diagrams
+
+The project includes several diagrams to help visualize the application architecture and flow. These diagrams are located in the `/diagrams` directory at the root of the repository.
+
+### Application Architecture
+
+The application architecture diagrams in the `/diagrams` directory include:
+- `class_diagram.puml` - Shows the relationships between modules
+- `main_sequence.puml` - Illustrates the main application flow
+- `aws_utils_sequence_diagram.puml` - Shows AWS service interactions
+- `transcrribe_sequence.puml` - Details the transcription process
+- `summarize_sequence.puml` - Illustrates the summarization process
+- `output_sequence_diagram.puml` - Shows the output handling process
+
+These diagrams help developers understand how the different components interact and the overall flow of the application.
+
+### Spinner Management Flow
+
+The `spinner_management_flow.puml` file in the `/diagrams` directory illustrates how progress spinners are managed throughout the application:
+- Initialization of the `SPINNER_STOPPED` flag
+- Proper updating of spinners during processing
+- Safe stopping of spinners to prevent thread panics
+- Different output paths and their spinner handling
+
+This diagram is particularly important for understanding how to properly manage spinner threads when extending the application with new features.
+
+To view these diagrams, you can use any PlantUML viewer or the online PlantUML server at http://www.plantuml.com/plantuml/uml/. The `/diagrams` directory also contains a README.md with more information about each diagram.
