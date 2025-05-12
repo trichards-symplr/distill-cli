@@ -17,6 +17,17 @@
 //! 
 //! When multiple webhooks are configured, the user can select which ones to use
 //! through a multi-select interface.
+//!
+//! ## Spinner Thread Management
+//!
+//! This module manages a global `SPINNER_STOPPED` flag to ensure that spinner threads
+//! are only stopped once. The flag is reset at the beginning of the application with
+//! `reset_spinner_flag()` and checked before any operation that would stop a spinner.
+//! 
+//! All functions that use spinners should:
+//! 1. Check `SPINNER_STOPPED` before stopping a spinner
+//! 2. Set `SPINNER_STOPPED` to true after stopping a spinner
+//! 3. Use `spinner.update()` instead of `spinner.stop_and_persist()` when possible
 
 use std::fs::File;
 use std::io::Write;
@@ -36,7 +47,19 @@ pub static SPINNER_STOPPED: AtomicBool = AtomicBool::new(false);
 /// Resets the spinner stopped flag
 /// 
 /// This function should be called at the beginning of the application
-/// to reset the spinner stopped flag.
+/// to reset the spinner stopped flag. This ensures that the spinner thread
+/// can be properly managed throughout the application lifecycle.
+/// 
+/// # Usage
+/// 
+/// Call this function once at the start of the main function:
+/// 
+/// ```rust
+/// fn main() {
+///     output::reset_spinner_flag();
+///     // Rest of the application...
+/// }
+/// ```
 pub fn reset_spinner_flag() {
     SPINNER_STOPPED.store(false, Ordering::SeqCst);
 }
@@ -167,6 +190,14 @@ pub fn write_markdown_file(summary_file_name: &str, summarized_text: &str, spinn
 /// # Returns
 ///
 /// A Result indicating success or an error
+///
+/// # Spinner Management
+///
+/// This function checks the `SPINNER_STOPPED` flag before stopping the spinner
+/// and updates the flag after stopping it. It uses `spinner.update()` for progress
+/// updates and only stops the spinner at the end of processing.
+///
+/// # Webhook Processing
 ///
 /// Retrieves the Slack webhooks from settings, formats the summary as a Slack message,
 /// and sends the message to each selected Slack webhook endpoint. Supports both legacy
@@ -374,6 +405,14 @@ pub async fn send_slack_notification(
 /// # Returns
 ///
 /// A Result indicating success or an error
+///
+/// # Spinner Management
+///
+/// This function checks the `SPINNER_STOPPED` flag before stopping the spinner
+/// and updates the flag after stopping it. It uses `spinner.update()` for progress
+/// updates and only stops the spinner at the end of processing.
+///
+/// # Webhook Processing
 ///
 /// Retrieves the Teams webhooks from settings, creates an adaptive card with the summary content,
 /// and sends the card to each selected Teams webhook endpoint. Supports both legacy

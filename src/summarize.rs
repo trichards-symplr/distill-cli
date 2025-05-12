@@ -18,6 +18,13 @@
 //! ## Usage
 //! This module is typically used after transcription to condense long transcripts
 //! into concise, readable summaries.
+//!
+//! ## Spinner Thread Management
+//!
+//! This module imports the `SPINNER_STOPPED` flag from the output module to ensure
+//! proper spinner thread management. When updating or stopping spinners, it checks
+//! this flag to prevent stopping a spinner thread more than once, which would cause
+//! a panic.
 
 use aws_config::SdkConfig;
 use aws_sdk_bedrockruntime::{primitives::Blob, Client};

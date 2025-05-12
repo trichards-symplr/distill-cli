@@ -1,0 +1,73 @@
+@startuml Spinner Management Flow
+
+skinparam backgroundColor #FFFFFF
+skinparam handwritten false
+skinparam monochrome false
+skinparam shadowing false
+skinparam defaultFontName "Arial"
+skinparam defaultFontSize 12
+skinparam roundCorner 8
+skinparam dpi 100
+skinparam arrowColor #666666
+skinparam activityBorderColor #666666
+skinparam activityBackgroundColor #EEEEEE
+skinparam activityDiamondBorderColor #666666
+skinparam activityDiamondBackgroundColor #EEEEEE
+skinparam noteBorderColor #666666
+skinparam noteBackgroundColor #FFFFCC
+
+title Spinner Thread Management Flow
+
+start
+:Application starts;
+:Call output::reset_spinner_flag();
+note right: Sets SPINNER_STOPPED to false
+
+partition "Main Processing" {
+  :Create spinner;
+  :Perform initial tasks;
+  :spinner.update() for progress;
+  
+  partition "Output Processing" {
+    if (Terminal output?) then (yes)
+      if (SPINNER_STOPPED == false?) then (yes)
+        :spinner.success("Done!");
+        :Set SPINNER_STOPPED = true;
+      else (no)
+        :Skip spinner operations;
+      endif
+    else (no)
+      if (File output?) then (yes)
+        :Process file output;
+        if (SPINNER_STOPPED == false?) then (yes)
+          :spinner.success("Done!");
+          :Set SPINNER_STOPPED = true;
+        endif
+      else (webhook output)
+        :Update spinner message;
+        note right: Use spinner.update() instead of stop_and_persist
+        
+        partition "Webhook Processing" {
+          :Process webhooks one by one;
+          :Update spinner for each webhook;
+          note right: spinner.update() for each webhook
+          
+          if (All webhooks processed) then (yes)
+            if (SPINNER_STOPPED == false?) then (yes)
+              if (Success?) then (yes)
+                :spinner.success(message);
+              else (error)
+                :spinner.stop_and_persist("❌", message);
+              endif
+              :Set SPINNER_STOPPED = true;
+            endif
+          endif
+        }
+      endif
+    endif
+  }
+}
+
+stop
+
+@enduml

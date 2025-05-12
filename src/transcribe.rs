@@ -12,6 +12,13 @@
 //! ## Usage
 //! This module is typically used by the main application to convert audio files to text
 //! before summarization. It requires AWS credentials and an S3 bucket to store the audio file.
+//!
+//! ## Spinner Thread Management
+//!
+//! This module imports the `SPINNER_STOPPED` flag from the output module to ensure
+//! proper spinner thread management. When updating or stopping spinners, it checks
+//! this flag to prevent stopping a spinner thread more than once, which would cause
+//! a panic.
 
 use aws_config::SdkConfig;
 use aws_sdk_transcribe::types::{
