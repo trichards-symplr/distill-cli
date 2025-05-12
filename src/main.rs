@@ -19,25 +19,6 @@
 //! - `transcribe`: Manages the audio transcription process using Amazon Transcribe
 //! - `summarize`: Handles text summarization using Amazon Bedrock
 //! - `output`: Provides functions for different output formats and notifications
-//!
-//! ## Command-line Options
-//! - `--input-audio-file` (`-i`): Path to the audio file to process (required)
-//! - `--output-type` (`-o`): Output format (Terminal, Text, Word, Markdown, Slack, SlackSplit, Teams, TeamsSplit)
-//! - `--summary-file-name` (`-s`): Base name for output files (default: "summarized_output")
-//! - `--language-code` (`-l`): Language code for transcription (default: "en-US")
-//! - `--delete-s3-object` (`-d`): Whether to delete the S3 object after processing (default: "Y")
-//! - `--save-transcript` (`-t`): Save the full transcript to a .trans file
-//!
-//! ## Configuration
-//! The application uses a config.toml file for settings like:
-//! - AWS S3 bucket name
-//! - AI model configuration
-//! - Webhook endpoints for notifications
-//!
-//! ## Requirements
-//! - AWS credentials configured
-//! - Access to Amazon Transcribe and Amazon Bedrock services
-//! - An S3 bucket for temporary file storage
 
 mod aws_utils;
 mod output;
@@ -53,8 +34,8 @@ use aws_sdk_s3::primitives::ByteStream;
 use aws_sdk_s3::Client;
 use clap::Parser;
 use config::{Config, File as ConfigFile};
-use dialoguer::{theme::ColorfulTheme, Input, Select};
-use spinoff::{spinners, Color, Spinner};
+use dialoguer::{theme::ColorfulTheme, Input, MultiSelect, Select};
+use spinoff::{Spinner, spinners, Color};
 
 #[derive(Debug, Parser)]
 #[clap(
@@ -113,6 +94,101 @@ fn get_teams_card_title() -> String {
         .default("A meeting from today...".to_string())
         .interact_text()
         .unwrap_or_else(|_| "A meeting from today...".to_string())
+}
+
+/// Gets webhooks from settings and prompts for selection if multiple are defined
+///
+/// # Arguments
+///
+/// * `settings` - Application configuration containing the webhooks
+/// * `service` - Service name ("teams" or "slack")
+///
+/// # Returns
+///
+/// A vector of indices of the selected webhooks
+///
+/// This function handles both legacy single webhook configurations and multiple webhook arrays.
+/// If only one webhook is configured (either as a legacy webhook_endpoint or as a single entry
+/// in the webhooks array), it will be used automatically without prompting the user.
+/// If multiple webhooks are configured, a multi-select dialog is shown to let the user
+/// choose which webhooks to use.
+fn select_webhooks(settings: &Config, service: &str) -> Result<Vec<usize>> {
+    // Try to get webhooks array first
+    let webhooks_path = format!("{}.webhooks", service);
+    let endpoint_path = format!("{}.webhook_endpoint", service);
+    
+    let webhooks = match settings.get_array(&webhooks_path) {
+        Ok(webhooks) => webhooks,
+        Err(_) => {
+            // Check for legacy single webhook
+            let webhook_endpoint = settings
+                .get_string(&endpoint_path)
+                .unwrap_or_default();
+                
+            if !webhook_endpoint.is_empty() {
+                // If we have a single legacy webhook, return index 0
+                return Ok(vec![0]);
+            }
+            return Ok(vec![]);
+        }
+    };
+    
+    if webhooks.is_empty() {
+        return Ok(vec![]);
+    }
+    
+    // If there's only one webhook, return it without prompting
+    if webhooks.len() == 1 {
+        return Ok(vec![0]);
+    }
+    
+    // For multiple webhooks, show selection dialog
+    let webhook_names: Vec<String> = webhooks
+        .iter()
+        .map(|w| {
+            // Convert to table and extract name safely
+            match w.clone().into_table() {
+                Ok(table) => table.get("name")
+                    .and_then(|v| v.clone().into_string().ok())
+                    .unwrap_or_else(|| "Unnamed webhook".to_string()),
+                Err(_) => "Invalid webhook".to_string()
+            }
+        })
+        .collect();
+    
+    let prompt = format!("📝 Select {} channels to send the summary to", service);
+    let selections = MultiSelect::with_theme(&ColorfulTheme::default())
+        .with_prompt(&prompt)
+        .items(&webhook_names)
+        .interact()?;
+    
+    Ok(selections)
+}
+
+/// Gets Teams webhooks from settings and prompts for selection if multiple are defined
+///
+/// # Arguments
+///
+/// * `settings` - Application configuration containing the Teams webhooks
+///
+/// # Returns
+///
+/// A vector of indices of the selected webhooks
+fn select_teams_webhooks(settings: &Config) -> Result<Vec<usize>> {
+    select_webhooks(settings, "teams")
+}
+
+/// Gets Slack webhooks from settings and prompts for selection if multiple are defined
+///
+/// # Arguments
+///
+/// * `settings` - Application configuration containing the Slack webhooks
+///
+/// # Returns
+///
+/// A vector of indices of the selected webhooks
+fn select_slack_webhooks(settings: &Config) -> Result<Vec<usize>> {
+    select_webhooks(settings, "slack")
 }
 
 /// Selects or validates an S3 bucket for file storage
@@ -206,6 +282,9 @@ fn load_settings() -> Result<Config> {
 async fn main() -> Result<()> {
     env_logger::init();
     
+    // Reset the spinner stopped flag at the beginning of the application
+    output::reset_spinner_flag();
+    
     // Parse command-line arguments first
     let Opt {
         input_audio_file,
@@ -249,17 +328,37 @@ async fn main() -> Result<()> {
     } else {
         String::new()
     };
+    
+    // Select webhooks early if needed
+    let slack_webhook_indices = if output_type == OutputType::Slack || output_type == OutputType::SlackSplit {
+        select_slack_webhooks(&settings)?
+    } else {
+        vec![]
+    };
+    
+    let teams_webhook_indices = if output_type == OutputType::Teams || output_type == OutputType::TeamsSplit {
+        select_teams_webhooks(&settings)?
+    } else {
+        vec![]
+    };
+    
+    // Check if we have webhooks selected when needed
+    if (output_type == OutputType::Slack || output_type == OutputType::SlackSplit) && slack_webhook_indices.is_empty() {
+        println!("No Slack webhooks selected. Will display summary in terminal instead.");
+    }
+    
+    if (output_type == OutputType::Teams || output_type == OutputType::TeamsSplit) && teams_webhook_indices.is_empty() {
+        println!("No Teams webhooks selected. Will display summary in terminal instead.");
+    }
 
-    let mut spinner = Spinner::new(spinners::Dots7, "Uploading file to S3...", Color::Green);
+    let mut spinner = Spinner::new(spinners::Dots, "Uploading file to S3...", Color::White);
 
     // Load the bucket region and create a new client to use that region
     let region = aws_utils::bucket_region(&s3_client, &bucket_name).await?;
     println!();
-    spinner.update(
-        spinners::Dots7,
-        format!("Using bucket region {}", region),
-        None,
-    );
+    let region_message = format!("Using bucket region {}", region);
+    let static_region_message: &'static str = Box::leak(region_message.into_boxed_str());
+    spinner.update(spinners::Dots, static_region_message, Some(Color::White));
     let regional_config = aws_utils::load_config(Some(region)).await;
     let regional_s3_client = Client::new(&regional_config);
 
@@ -272,11 +371,9 @@ async fn main() -> Result<()> {
         .into_owned();
 
     println!();
-    spinner.update(
-        spinners::Dots7,
-        format!("Audio File {}", file_name),
-        None,
-    );
+    let audio_message = format!("Audio File: {}", file_name);
+    let static_audio_message: &'static str = Box::leak(audio_message.into_boxed_str());
+    spinner.update(spinners::Dots, static_audio_message, Some(Color::White));
 
     let absolute_path = shellexpand::tilde(file_path.to_str().unwrap()).to_string();
     let absolute_path = Path::new(&absolute_path);
@@ -303,7 +400,7 @@ async fn main() -> Result<()> {
     let s3_uri = format!("s3://{}/{}", bucket_name, file_name);
 
     println!();
-    spinner.update(spinners::Dots7, "Transcribing audio...", None);
+    spinner.update(spinners::Dots, "Transcribing audio...", Some(Color::White));
 
     // Transcribe the audio
     let transcription: String = transcribe::transcribe_audio(
@@ -316,7 +413,7 @@ async fn main() -> Result<()> {
     .await?;
 
     // Summarize the transcription
-    spinner.update(spinners::Dots7, "Summarizing text...", None);
+    spinner.update(spinners::Dots, "Summarizing text...", Some(Color::White));
     let summarized_text = summarize::summarize_text(&config, &transcription, &mut spinner).await?;
 
     // Process output based on selected output type
@@ -328,7 +425,10 @@ async fn main() -> Result<()> {
             output::write_text_file(&summary_file_name.clone(), &summarized_text, &mut spinner)?;
         }
         OutputType::Terminal => {
-            spinner.success("Done!");
+            if !output::SPINNER_STOPPED.load(std::sync::atomic::Ordering::SeqCst) {
+                spinner.success("Done!");
+                output::SPINNER_STOPPED.store(true, std::sync::atomic::Ordering::SeqCst);
+            }
             println!();
             println!("Summary:\n{}\n", summarized_text);
         }
@@ -336,7 +436,18 @@ async fn main() -> Result<()> {
             output::write_markdown_file(&summary_file_name.clone(), &summarized_text, &mut spinner)?;
         }
         OutputType::Slack => {
-            output::send_slack_notification(&settings, &mut spinner, &summarized_text).await?;
+            if slack_webhook_indices.is_empty() {
+                println!("No Slack webhooks selected. Displaying summary in terminal instead.");
+                println!("Summary:\n{}\n", summarized_text);
+            } else {
+                output::send_slack_notification(
+                    &settings,
+                    &mut spinner,
+                    &summarized_text,
+                    &slack_webhook_indices,
+                )
+                .await?;
+            }
         }
         OutputType::SlackSplit => {
             // First write to a file
@@ -352,20 +463,37 @@ async fn main() -> Result<()> {
             println!("\n💾 Summary written to {}", output_file_path_txt.display());
             
             // Update spinner for Slack notification
-            spinner.update(spinners::Dots7, "Sending to Slack...", None);
-            
-            // Send to Slack
-            output::send_slack_notification(&settings, &mut spinner, &summarized_text).await?;
+            if !slack_webhook_indices.is_empty() {
+                if !output::SPINNER_STOPPED.load(std::sync::atomic::Ordering::SeqCst) {
+                    spinner.update(spinners::Dots, "Sending to Slack...", Some(Color::White));
+                }
+                
+                output::send_slack_notification(
+                    &settings,
+                    &mut spinner,
+                    &summarized_text,
+                    &slack_webhook_indices,
+                )
+                .await?;
+            } else {
+                println!("No Slack webhooks selected. Summary was only written to file.");
+            }
         }
         OutputType::Teams => {
-            output::send_teams_notification(
-                &settings,
-                &mut spinner,
-                &summarized_text,
-                &user_input,
-                "Summary sent to Teams!",
-            )
-            .await?;
+            if teams_webhook_indices.is_empty() {
+                println!("No Teams webhooks selected. Displaying summary in terminal instead.");
+                println!("Summary:\n{}\n", summarized_text);
+            } else {
+                output::send_teams_notification(
+                    &settings,
+                    &mut spinner,
+                    &summarized_text,
+                    &user_input,
+                    "Summary sent to Teams!",
+                    &teams_webhook_indices,
+                )
+                .await?;
+            }
         }
         OutputType::TeamsSplit => {
             // First write to a file
@@ -381,17 +509,23 @@ async fn main() -> Result<()> {
             println!("\n💾 Summary written to {}", output_file_path_txt.display());
             
             // Update spinner for Teams notification
-            spinner.update(spinners::Dots7, "Sending to Teams...", None);
-            
-            // Send to Teams
-            output::send_teams_notification(
-                &settings,
-                &mut spinner,
-                &summarized_text,
-                &user_input,
-                "Summary sent to Teams and written to output file!",
-            )
-            .await?;
+            if !teams_webhook_indices.is_empty() {
+                if !output::SPINNER_STOPPED.load(std::sync::atomic::Ordering::SeqCst) {
+                    spinner.update(spinners::Dots, "Sending to Teams...", Some(Color::White));
+                }
+                
+                output::send_teams_notification(
+                    &settings,
+                    &mut spinner,
+                    &summarized_text,
+                    &user_input,
+                    "Summary sent to Teams and written to output file!",
+                    &teams_webhook_indices,
+                )
+                .await?;
+            } else {
+                println!("No Teams webhooks selected. Summary was only written to file.");
+            }
         }
     }
 

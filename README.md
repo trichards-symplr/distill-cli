@@ -17,7 +17,7 @@ Distill CLI is a tool for transcribing and summarizing audio files using AWS ser
 - [Config settings](#config-settings)
   - [How to adjust model values](#how-to-adjust-model-values)
   - [Supported Bedrock models](#supported-bedrock-models)
-  - [Additional output settings](#additional-output-settings)
+  - [Configuring Webhook Endpoints](#configuring-webhook-endpoints)
 - [Automation](#automation)
 - [Security](#security)
 - [License](#license)
@@ -118,12 +118,13 @@ When you run Distill CLI, it follows this process:
 1. **Parse Arguments**: Processes your command-line options
 2. **Load Configuration**: Reads settings from `config.toml`
 3. **Select S3 Bucket**: Uses the bucket from config or prompts you to choose one
-4. **Upload Audio**: Sends your audio file to the selected S3 bucket with server-side encryption (AES-256)
-5. **Transcribe Audio**: Uses Amazon Transcribe to convert speech to text
-6. **Summarize Text**: Uses Amazon Bedrock to create a concise summary
-7. **Process Output**: Delivers the summary in your chosen format
-8. **Cleanup**: Optionally deletes the S3 object based on `--delete-s3-object`
-9. **Save Transcript** (Optional): Saves the full transcript if `--save-transcript` is specified
+4. **Select Webhooks**: If using Teams or Slack output, prompts for webhook selection
+5. **Upload Audio**: Sends your audio file to the selected S3 bucket with server-side encryption (AES-256)
+6. **Transcribe Audio**: Uses Amazon Transcribe to convert speech to text
+7. **Summarize Text**: Uses Amazon Bedrock to create a concise summary
+8. **Process Output**: Delivers the summary in your chosen format
+9. **Cleanup**: Optionally deletes the S3 object based on `--delete-s3-object`
+10. **Save Transcript** (Optional): Saves the full transcript if `--save-transcript` is specified
 
 # Command Line Options 
 
@@ -143,18 +144,16 @@ When you run Distill CLI, it follows this process:
 - **Text**: Writes the summary to a `.txt` file
 - **Word**: Creates a Microsoft Word (`.docx`) document with the summary
 - **Markdown**: Creates a `.md` file with formatted summary
-- **Slack**: Sends the summary to a Slack webhook
+- **Slack**: Sends the summary to one or more Slack webhooks
 - **SlackSplit**: Writes the summary to a `.txt` file AND sends it to Slack
-- **Teams**: Sends the summary as an adaptive card to Microsoft Teams
+- **Teams**: Sends the summary as an adaptive card to one or more Microsoft Teams webhooks
 - **TeamsSplit**: Writes the summary to a `.txt` file AND sends it to Teams
 
 ### Teams and Slack Integration
 
 For the **Teams** and **TeamsSplit** output types, you will be asked for a short title that will be used when creating the AdaptiveCard. 
 
-To use Microsoft Teams, you will need to create a workflow in Teams that will post to a chat or channel webhook. Copy that webhook into the Teams section of the **config.toml** file.
-
-Similarly, for Slack integration, you'll need to create a [Slack webhook](https://api.slack.com/messaging/webhooks) and add it to your `config.toml`.
+To use Microsoft Teams or Slack, you'll need to configure webhook endpoints in your `config.toml` file. See the [Configuring Webhook Endpoints](#configuring-webhook-endpoints) section for details.
 
 # Config settings
 
@@ -235,29 +234,64 @@ $ aws bedrock list-foundation-models
 }
 ```
 
-## Additional output settings
+## Configuring Webhook Endpoints
 
-### Slack and Teams
+Distill CLI supports sending summaries to both Slack and Microsoft Teams through webhooks. You can configure either a single webhook endpoint or multiple webhook endpoints for each service.
 
-To output a summary to a Slack channel, create a [Slack webhook](https://api.slack.com/messaging/webhooks), then update and uncomment the endpoint in your `config.toml`. If you don't set the endpoint, or if the endpoint is commented out, you'll receive the error "Slack webhook endpoint is not configured. Skipping Slack notification.".
+### Single Webhook Configuration (Legacy)
 
-```
-...
-# =============================================================================
-# Slack Integration
-# =============================================================================
+For a single webhook, use the following format in your `config.toml`:
 
+```toml
 [slack]
-# webhook_endpoint = "https://hooks.slack.com/workflows/XYZ/ABC/123"
-
-# =============================================================================
-# Teams Integration
-# =============================================================================
+webhook_endpoint = "https://hooks.slack.com/workflows/XYZ/ABC/123"
 
 [teams]
-# Hook to primary team channel
-# webhook_endpoint = "https://prod-33.westus.logic.azure.com:443/workflows/....."
+webhook_endpoint = "https://prod-33.westus.logic.azure.com:443/workflows/....."
 ```
+
+### Multiple Webhook Configuration
+
+For multiple webhooks, use the array format with named endpoints:
+
+```toml
+[slack]
+webhooks = [
+  { name = "General Channel", endpoint = "https://hooks.slack.com/workflows/XYZ/ABC/123" },
+  { name = "Project Team", endpoint = "https://hooks.slack.com/workflows/XYZ/DEF/456" },
+  { name = "Management", endpoint = "https://hooks.slack.com/workflows/XYZ/GHI/789" }
+]
+
+[teams]
+webhooks = [
+  { name = "General Channel", endpoint = "https://prod-33.westus.logic.azure.com:443/workflows/..." },
+  { name = "Project Team", endpoint = "https://prod-33.westus.logic.azure.com:443/workflows/..." },
+  { name = "Management", endpoint = "https://prod-33.westus.logic.azure.com:443/workflows/..." }
+]
+```
+
+### Webhook Selection
+
+When using the Slack or Teams output types with multiple webhooks configured:
+
+1. If only one webhook is configured, it will be used automatically without prompting.
+2. If multiple webhooks are configured, you'll be presented with a multi-select dialog to choose which webhooks to send the summary to:
+
+```
+? Select Teams channels to send the summary to: ›
+❯ □ General Channel
+  □ Project Team
+  □ Management
+```
+
+Use the arrow keys to navigate, space to toggle selection, and enter to confirm. By default, no webhooks are selected, so you need to explicitly choose which ones to use.
+
+3. The summary will be sent to all selected webhooks, with progress updates for each.
+
+### Creating Webhooks
+
+- **For Slack**: Create a [Slack webhook](https://api.slack.com/messaging/webhooks) by setting up an incoming webhook app in your Slack workspace.
+- **For Teams**: Create a Teams webhook by setting up a workflow in Microsoft Teams that will post to a chat or channel.
 
 ## Automation
 

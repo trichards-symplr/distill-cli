@@ -9,25 +9,37 @@
 //! The module provides a consistent interface for the main application to use regardless
 //! of the output destination.
 //!
-//! ## Configuration
-//! The notification functions rely on webhook URLs configured in config.toml:
-//! - `slack.webhook_endpoint` for Slack notifications
-//! - `teams.webhook_endpoint` for Teams notifications
-//!
-//! ## Usage
-//! This module is used at the end of the processing pipeline to deliver the
-//! summarized content in the user's preferred format.
+//! ## Webhook Support
+//! 
+//! This module supports sending notifications to both single and multiple webhooks:
+//! - Legacy single webhook endpoints via `webhook_endpoint` config setting
+//! - Multiple named webhooks via `webhooks` array in config
+//! 
+//! When multiple webhooks are configured, the user can select which ones to use
+//! through a multi-select interface.
 
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use anyhow::Result;
 use config::Config;
 use docx_rs::{Docx, Paragraph, Run};
 use reqwest::Client as ReqwestClient;
 use serde_json::json;
-use spinoff::Spinner;
+use spinoff::{Spinner, spinners, Color};
+
+// Global flag to track whether the spinner has been stopped
+pub static SPINNER_STOPPED: AtomicBool = AtomicBool::new(false);
+
+/// Resets the spinner stopped flag
+/// 
+/// This function should be called at the beginning of the application
+/// to reset the spinner stopped flag.
+pub fn reset_spinner_flag() {
+    SPINNER_STOPPED.store(false, Ordering::SeqCst);
+}
 
 /// Writes summary content to a text file
 ///
@@ -55,7 +67,10 @@ pub fn write_text_file(summary_file_name: &str, summarized_text: &str, spinner: 
         .map_err(|e| anyhow::anyhow!("Error creating file: {}", e))?;
 
     // Simply update the spinner with success message
-    spinner.success("Done!");
+    if !SPINNER_STOPPED.load(Ordering::SeqCst) {
+        spinner.success("Done!");
+        SPINNER_STOPPED.store(true, Ordering::SeqCst);
+    }
     
     println!("💾 Summary written to {}", output_file_path.display());
     
@@ -93,7 +108,11 @@ pub fn write_word_file(summary_file_name: &str, summarized_text: &str, spinner: 
         .pack(file)
         .map_err(|e| anyhow::anyhow!("Error writing Word document: {}", e))?;
 
-    spinner.success("Done!");
+    if !SPINNER_STOPPED.load(Ordering::SeqCst) {
+        spinner.success("Done!");
+        SPINNER_STOPPED.store(true, Ordering::SeqCst);
+    }
+    
     println!("💾 Summary written to {}", output_file_path.display());
     
     Ok(())
@@ -126,122 +145,259 @@ pub fn write_markdown_file(summary_file_name: &str, summarized_text: &str, spinn
     file.write_all(markdown_content.as_bytes())
         .map_err(|e| anyhow::anyhow!("Error writing Markdown file: {}", e))?;
 
-    spinner.success("Done!");
+    if !SPINNER_STOPPED.load(Ordering::SeqCst) {
+        spinner.success("Done!");
+        SPINNER_STOPPED.store(true, Ordering::SeqCst);
+    }
+    
     println!("💾 Summary written to {}", output_file_path.display());
     
     Ok(())
 }
 
-/// Sends a summary notification to Slack via webhook
+/// Sends a summary notification to one or more Slack webhooks
 ///
 /// # Arguments
 ///
-/// * `settings` - Application configuration containing the Slack webhook URL
+/// * `settings` - Application configuration containing the Slack webhook URLs
 /// * `spinner` - Progress spinner to update during the process
 /// * `summarized_text` - The text content to send to Slack
+/// * `webhook_indices` - Indices of the selected webhooks to use
 ///
 /// # Returns
 ///
 /// A Result indicating success or an error
 ///
-/// Retrieves the Slack webhook URL from settings, formats the summary as a Slack message,
-/// and sends the message to the webhook endpoint.
+/// Retrieves the Slack webhooks from settings, formats the summary as a Slack message,
+/// and sends the message to each selected Slack webhook endpoint. Supports both legacy
+/// single webhook configuration and multiple webhook configuration.
 pub async fn send_slack_notification(
     settings: &Config,
     spinner: &mut Spinner,
     summarized_text: &str,
+    webhook_indices: &[usize],
 ) -> Result<()> {
     let client = ReqwestClient::new();
 
-    let slack_webhook_endpoint = settings
-        .get_string("slack.webhook_endpoint")
-        .unwrap_or_default();
-
-    if slack_webhook_endpoint.is_empty() {
-        spinner.stop_and_persist(
-            "⚠️",
-            "Slack webhook endpoint is not configured. Skipping Slack notification.",
-        );
+    // Get webhooks from config
+    let webhooks = match settings.get_array("slack.webhooks") {
+        Ok(webhooks) => webhooks,
+        Err(_) => {
+            // Try legacy single webhook endpoint for backward compatibility
+            let slack_webhook_endpoint = settings
+                .get_string("slack.webhook_endpoint")
+                .unwrap_or_default();
+                
+            if slack_webhook_endpoint.is_empty() {
+                if !SPINNER_STOPPED.load(Ordering::SeqCst) {
+                    spinner.stop_and_persist(
+                        "⚠️",
+                        "Slack webhook endpoint is not configured. Skipping Slack notification.",
+                    );
+                    SPINNER_STOPPED.store(true, Ordering::SeqCst);
+                }
+                println!("Summary:\n{}\n", summarized_text);
+                return Ok(());
+            }
+            
+            // For legacy single webhook, just use it directly
+            let message = "Sending to Slack";
+            spinner.update(spinners::Dots, message, Some(Color::White));
+            
+            let content = format!("A summarization job just completed:\n\n{}", summarized_text);
+            let payload = json!({
+                "content": content
+            });
+            
+            let result = client
+                .post(&slack_webhook_endpoint)
+                .header("Content-Type", "application/json")
+                .json(&payload)
+                .send()
+                .await;
+                
+            match result {
+                Ok(response) => {
+                    if response.status().is_success() {
+                        if !SPINNER_STOPPED.load(Ordering::SeqCst) {
+                            spinner.success("Summary sent to Slack!");
+                            SPINNER_STOPPED.store(true, Ordering::SeqCst);
+                        }
+                    } else {
+                        let status = response.status();
+                        println!("❌ Error sending summary to Slack: {}", status);
+                        if !SPINNER_STOPPED.load(Ordering::SeqCst) {
+                            spinner.stop_and_persist("❌", "Failed to send summary to Slack!");
+                            SPINNER_STOPPED.store(true, Ordering::SeqCst);
+                        }
+                    }
+                }
+                Err(err) => {
+                    let err_msg = err.to_string();
+                    println!("❌ Error sending summary to Slack: {}", err_msg);
+                    if !SPINNER_STOPPED.load(Ordering::SeqCst) {
+                        spinner.stop_and_persist("❌", "Failed to send summary to Slack!");
+                        SPINNER_STOPPED.store(true, Ordering::SeqCst);
+                    }
+                }
+            }
+            
+            return Ok(());
+        }
+    };
+    
+    if webhooks.is_empty() || webhook_indices.is_empty() {
+        if !SPINNER_STOPPED.load(Ordering::SeqCst) {
+            spinner.stop_and_persist(
+                "⚠️",
+                "No Slack webhooks selected. Skipping Slack notification.",
+            );
+            SPINNER_STOPPED.store(true, Ordering::SeqCst);
+        }
         println!("Summary:\n{}\n", summarized_text);
         return Ok(());
     }
-
+    
+    // Create the message payload
     let content = format!("A summarization job just completed:\n\n{}", summarized_text);
     let payload = json!({
         "content": content
     });
     
-    let result = client
-        .post(slack_webhook_endpoint)
-        .header("Content-Type", "application/json")
-        .json(&payload)
-        .send()
-        .await;
+    // Update the main spinner instead of stopping it
+    let processing_msg = format!("Processing {} Slack webhooks...", webhook_indices.len());
+    let static_processing_msg: &'static str = Box::leak(processing_msg.into_boxed_str());
+    spinner.update(spinners::Dots, static_processing_msg, Some(Color::White));
+    
+    // Send to each selected webhook
+    let mut success_count = 0;
+    let mut failure_count = 0;
+    
+    for &index in webhook_indices {
+        if index >= webhooks.len() {
+            continue;
+        }
         
-    match result {
-        Ok(response) => {
-            if response.status().is_success() {
-                spinner.success("Summary sent to Slack!");
-            } else {
-                let status = response.status();
-                eprintln!("Error sending summary to Slack: {}", status);
-                spinner.stop_and_persist("❌", "Failed to send summary to Slack!");
+        // Extract webhook details safely
+        let webhook = &webhooks[index];
+        
+        // Use into_table() to get a table view of the config value
+        let webhook_table = match webhook.clone().into_table() {
+            Ok(table) => table,
+            Err(_) => continue,
+        };
+        
+        // Get name and endpoint from the table
+        let webhook_name = webhook_table.get("name")
+            .and_then(|v| v.clone().into_string().ok())
+            .unwrap_or_else(|| format!("Webhook {}", index + 1));
+            
+        let endpoint = match webhook_table.get("endpoint").and_then(|v| v.clone().into_string().ok()) {
+            Some(ep) => ep,
+            None => continue,
+        };
+        
+        if endpoint.is_empty() {
+            continue;
+        }
+        
+        // Update the main spinner with the current webhook
+        let message = format!("Sending to Slack ({})", webhook_name);
+        let static_message: &'static str = Box::leak(message.into_boxed_str());
+        spinner.update(spinners::Dots, static_message, Some(Color::White));
+        
+        let result = client
+            .post(&endpoint)
+            .header("Content-Type", "application/json")
+            .json(&payload)
+            .send()
+            .await;
+            
+        match result {
+            Ok(response) => {
+                if response.status().is_success() {
+                    success_count += 1;
+                    // Update spinner with success message
+                    let success_msg = format!("Successfully sent to Slack ({})", webhook_name);
+                    let static_success_msg: &'static str = Box::leak(success_msg.into_boxed_str());
+                    spinner.update(spinners::Dots, static_success_msg, Some(Color::Green));
+                } else {
+                    let status = response.status();
+                    // Update spinner with error message
+                    let error_msg = format!("Error sending to Slack ({}): {}", webhook_name, status);
+                    let static_error_msg: &'static str = Box::leak(error_msg.into_boxed_str());
+                    spinner.update(spinners::Dots, static_error_msg, Some(Color::Red));
+                    failure_count += 1;
+                }
+            }
+            Err(err) => {
+                let err_msg = err.to_string();
+                // Update spinner with error message
+                let error_msg = format!("Error sending to Slack ({}): {}", webhook_name, err_msg);
+                let static_error_msg: &'static str = Box::leak(error_msg.into_boxed_str());
+                spinner.update(spinners::Dots, static_error_msg, Some(Color::Red));
+                failure_count += 1;
             }
         }
-        Err(err) => {
-            let err_msg = err.to_string();
-            eprintln!("Error sending summary to Slack: {}", err_msg);
-            spinner.stop_and_persist("❌", "Failed to send summary to Slack!");
+    }
+    
+    // Update the spinner with the final result
+    if !SPINNER_STOPPED.load(Ordering::SeqCst) {
+        if failure_count == 0 && success_count > 0 {
+            let message = format!("Summary sent to {} Slack webhooks", success_count);
+            let static_message: &'static str = Box::leak(message.into_boxed_str());
+            spinner.success(static_message);
+        } else if failure_count > 0 && success_count > 0 {
+            let message = format!("Sent to {} Slack webhooks, failed to send to {} webhooks", success_count, failure_count);
+            let static_message: &'static str = Box::leak(message.into_boxed_str());
+            spinner.stop_and_persist("⚠️", static_message);
+        } else {
+            spinner.stop_and_persist("❌", "Failed to send summary to any Slack webhooks!");
         }
+        SPINNER_STOPPED.store(true, Ordering::SeqCst);
     }
     
     Ok(())
 }
 
-/// Sends a summary notification to Microsoft Teams via webhook
+/// Sends a summary notification to one or more Microsoft Teams webhooks
 ///
 /// # Arguments
 ///
-/// * `settings` - Application configuration containing the Teams webhook URL
+/// * `settings` - Application configuration containing the Teams webhook URLs
 /// * `spinner` - Progress spinner to update during the process
 /// * `summarized_text` - The text content to send to Teams
 /// * `user_input` - Title for the Teams card
 /// * `success_message` - Message to display on successful delivery
+/// * `webhook_indices` - Indices of the selected webhooks to use
 ///
 /// # Returns
 ///
 /// A Result indicating success or an error
 ///
-/// Retrieves the Teams webhook URL from settings, creates an adaptive card with the summary content,
-/// and sends the card to the Teams webhook endpoint.
+/// Retrieves the Teams webhooks from settings, creates an adaptive card with the summary content,
+/// and sends the card to each selected Teams webhook endpoint. Supports both legacy
+/// single webhook configuration and multiple webhook configuration.
 pub async fn send_teams_notification(
     settings: &Config,
     spinner: &mut Spinner,
     summarized_text: &str,
     user_input: &str,
     success_message: &str,
+    webhook_indices: &[usize],
 ) -> Result<()> {
     let client = ReqwestClient::new();
-
+    
+    // Get current date and format it
     let current_date = chrono::Local::now();
     let formatted_date = current_date.format("%m-%d-%Y %I:%M:%S %p").to_string();
     let tz = tz::TimeZone::local().expect("Unable to determine timezone");
-    let tz_name = tz.find_current_local_time_type().expect("Could not find local timezone type").time_zone_designation();
+    let tz_name = tz.find_current_local_time_type()
+        .expect("Could not find local timezone type")
+        .time_zone_designation();
     let date_header = format!("Date: {} {}", formatted_date, tz_name);
 
-    let teams_webhook_endpoint = settings
-        .get_string("teams.webhook_endpoint")
-        .unwrap_or_default();
-
-    if teams_webhook_endpoint.is_empty() {
-        spinner.stop_and_persist(
-            "⚠️",
-            "Teams webhook endpoint is not configured. Skipping Teams notification.",
-        );
-        println!("Summary:\n{}\n", summarized_text);
-        return Ok(());
-    }
-
+    // Create the adaptive card payload
     let text = format!("{}", summarized_text);
     let payload = json!({
         "type":"message",
@@ -319,29 +475,172 @@ pub async fn send_teams_notification(
         ]
     });
 
-    let result = client
-        .post(teams_webhook_endpoint)
-        .header("Content-Type", "application/json")
-        .json(&payload)
-        .send()
-        .await;
+    // Get webhooks from config
+    let webhooks = match settings.get_array("teams.webhooks") {
+        Ok(webhooks) => webhooks,
+        Err(_) => {
+            // Try legacy single webhook endpoint for backward compatibility
+            let teams_webhook_endpoint = settings
+                .get_string("teams.webhook_endpoint")
+                .unwrap_or_default();
+                
+            if teams_webhook_endpoint.is_empty() {
+                if !SPINNER_STOPPED.load(Ordering::SeqCst) {
+                    spinner.stop_and_persist(
+                        "⚠️",
+                        "Teams webhook endpoint is not configured. Skipping Teams notification.",
+                    );
+                    SPINNER_STOPPED.store(true, Ordering::SeqCst);
+                }
+                println!("Summary:\n{}\n", summarized_text);
+                return Ok(());
+            }
+            
+            // For legacy single webhook, just use it directly
+            let message = "Sending to Teams";
+            spinner.update(spinners::Dots, message, Some(Color::White));
+            
+            let result = client
+                .post(&teams_webhook_endpoint)
+                .header("Content-Type", "application/json")
+                .json(&payload)
+                .send()
+                .await;
+                
+            match result {
+                Ok(response) => {
+                    if response.status().is_success() {
+                        if !SPINNER_STOPPED.load(Ordering::SeqCst) {
+                            spinner.success(success_message);
+                            SPINNER_STOPPED.store(true, Ordering::SeqCst);
+                        }
+                    } else {
+                        let status = response.status();
+                        println!("❌ Error sending summary to Teams: {}", status);
+                        if !SPINNER_STOPPED.load(Ordering::SeqCst) {
+                            spinner.stop_and_persist("❌", "Failed to send summary to Teams!");
+                            SPINNER_STOPPED.store(true, Ordering::SeqCst);
+                        }
+                    }
+                }
+                Err(err) => {
+                    let err_msg = err.to_string();
+                    println!("❌ Error sending summary to Teams: {}", err_msg);
+                    if !SPINNER_STOPPED.load(Ordering::SeqCst) {
+                        spinner.stop_and_persist("❌", "Failed to send summary to Teams!");
+                        SPINNER_STOPPED.store(true, Ordering::SeqCst);
+                    }
+                }
+            }
+            
+            return Ok(());
+        }
+    };
+    
+    if webhooks.is_empty() || webhook_indices.is_empty() {
+        if !SPINNER_STOPPED.load(Ordering::SeqCst) {
+            spinner.stop_and_persist(
+                "⚠️",
+                "No Teams webhooks selected. Skipping Teams notification.",
+            );
+            SPINNER_STOPPED.store(true, Ordering::SeqCst);
+        }
+        println!("Summary:\n{}\n", summarized_text);
+        return Ok(());
+    }
+    
+    // Update the main spinner instead of stopping it
+    let processing_msg = format!("Processing {} Teams webhooks...", webhook_indices.len());
+    let static_processing_msg: &'static str = Box::leak(processing_msg.into_boxed_str());
+    spinner.update(spinners::Dots, static_processing_msg, Some(Color::White));
+    
+    // Send to each selected webhook
+    let mut success_count = 0;
+    let mut failure_count = 0;
+    
+    for &index in webhook_indices {
+        if index >= webhooks.len() {
+            continue;
+        }
         
-    match result {
-        Ok(response) => {
-            if response.status().is_success() {
-                spinner.success(success_message);
-            } else {
-                let status = response.status();
-                eprintln!("Error sending summary to Teams: {}", status);
-                spinner.stop_and_persist("❌", "Failed to send summary to Teams!");
+        // Extract webhook details safely
+        let webhook = &webhooks[index];
+        
+        // Use into_table() to get a table view of the config value
+        let webhook_table = match webhook.clone().into_table() {
+            Ok(table) => table,
+            Err(_) => continue,
+        };
+        
+        // Get name and endpoint from the table
+        let webhook_name = webhook_table.get("name")
+            .and_then(|v| v.clone().into_string().ok())
+            .unwrap_or_else(|| format!("Webhook {}", index + 1));
+            
+        let endpoint = match webhook_table.get("endpoint").and_then(|v| v.clone().into_string().ok()) {
+            Some(ep) => ep,
+            None => continue,
+        };
+        
+        if endpoint.is_empty() {
+            continue;
+        }
+        
+        // Update the main spinner with the current webhook
+        let message = format!("Sending to Teams ({})", webhook_name);
+        let static_message: &'static str = Box::leak(message.into_boxed_str());
+        spinner.update(spinners::Dots, static_message, Some(Color::White));
+        
+        let result = client
+            .post(&endpoint)
+            .header("Content-Type", "application/json")
+            .json(&payload)
+            .send()
+            .await;
+            
+        match result {
+            Ok(response) => {
+                if response.status().is_success() {
+                    success_count += 1;
+                    // Update spinner with success message
+                    let success_msg = format!("Successfully sent to Teams ({})", webhook_name);
+                    let static_success_msg: &'static str = Box::leak(success_msg.into_boxed_str());
+                    spinner.update(spinners::Dots, static_success_msg, Some(Color::Green));
+                } else {
+                    let status = response.status();
+                    // Update spinner with error message
+                    let error_msg = format!("Error sending to Teams ({}): {}", webhook_name, status);
+                    let static_error_msg: &'static str = Box::leak(error_msg.into_boxed_str());
+                    spinner.update(spinners::Dots, static_error_msg, Some(Color::Red));
+                    failure_count += 1;
+                }
+            }
+            Err(err) => {
+                let err_msg = err.to_string();
+                // Update spinner with error message
+                let error_msg = format!("Error sending to Teams ({}): {}", webhook_name, err_msg);
+                let static_error_msg: &'static str = Box::leak(error_msg.into_boxed_str());
+                spinner.update(spinners::Dots, static_error_msg, Some(Color::Red));
+                failure_count += 1;
             }
         }
-        Err(err) => {
-            let err_msg = err.to_string();
-            eprintln!("Error sending summary to Teams: {}", err_msg);
-            spinner.stop_and_persist("❌", "Failed to send summary to Teams!");
-        }
     }
-
+    
+    // Update the spinner with the final result
+    if !SPINNER_STOPPED.load(Ordering::SeqCst) {
+        if failure_count == 0 && success_count > 0 {
+            let message = format!("{} (Sent to {} webhooks)", success_message, success_count);
+            let static_message: &'static str = Box::leak(message.into_boxed_str());
+            spinner.success(static_message);
+        } else if failure_count > 0 && success_count > 0 {
+            let message = format!("Sent to {} Teams webhooks, failed to send to {} webhooks", success_count, failure_count);
+            let static_message: &'static str = Box::leak(message.into_boxed_str());
+            spinner.stop_and_persist("⚠️", static_message);
+        } else {
+            spinner.stop_and_persist("❌", "Failed to send summary to any Teams webhooks!");
+        }
+        SPINNER_STOPPED.store(true, Ordering::SeqCst);
+    }
+    
     Ok(())
 }
