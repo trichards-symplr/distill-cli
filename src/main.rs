@@ -344,11 +344,11 @@ async fn main() -> Result<()> {
     
     // Check if we have webhooks selected when needed
     if (output_type == OutputType::Slack || output_type == OutputType::SlackSplit) && slack_webhook_indices.is_empty() {
-        println!("No Slack webhooks selected. Will display summary in terminal instead.");
+        println!("No Slack webhooks selected.");
     }
     
     if (output_type == OutputType::Teams || output_type == OutputType::TeamsSplit) && teams_webhook_indices.is_empty() {
-        println!("No Teams webhooks selected. Will display summary in terminal instead.");
+        println!("No Teams webhooks selected.");
     }
 
     let mut spinner = Spinner::new(spinners::Dots, "Uploading file to S3...", Color::White);
