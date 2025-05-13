@@ -356,11 +356,11 @@ async fn main() -> Result<()> {
     
     // Check if we have webhooks selected when needed
     if (output_type == OutputType::Slack || output_type == OutputType::SlackSplit) && slack_webhook_indices.is_empty() {
-        println!("No Slack webhooks selected.");
+        println!("⚠️ No Slack webhooks selected.");
     }
     
     if (output_type == OutputType::Teams || output_type == OutputType::TeamsSplit) && teams_webhook_indices.is_empty() {
-        println!("No Teams webhooks selected.");
+        println!("⚠️ No Teams webhooks selected.");
     }
 
     let mut spinner = Spinner::new(spinners::Dots, "Uploading file to S3...", Color::White);
@@ -383,9 +383,9 @@ async fn main() -> Result<()> {
         .into_owned();
 
     println!();
-    let audio_message = format!("Audio File: {}", file_name);
-    let static_audio_message: &'static str = Box::leak(audio_message.into_boxed_str());
-    spinner.update(spinners::Dots, static_audio_message, Some(Color::White));
+    // let audio_message = format!("Audio File: {}", file_name);
+    // let static_audio_message: &'static str = Box::leak(audio_message.into_boxed_str());
+    // spinner.update(spinners::Dots, static_audio_message, Some(Color::White));
 
     let absolute_path = shellexpand::tilde(file_path.to_str().unwrap()).to_string();
     let absolute_path = Path::new(&absolute_path);
@@ -449,7 +449,7 @@ async fn main() -> Result<()> {
         }
         OutputType::Slack => {
             if slack_webhook_indices.is_empty() {
-                println!("No Slack webhooks selected. Displaying summary in terminal instead.");
+                println!("⚠️ No Slack webhooks selected. Displaying summary in terminal instead.");
                 println!("Summary:\n{}\n", summarized_text);
             } else {
                 output::send_slack_notification(
@@ -488,12 +488,12 @@ async fn main() -> Result<()> {
                 )
                 .await?;
             } else {
-                println!("No Slack webhooks selected. Summary was only written to file.");
+                println!("⚠️ No Slack webhooks selected. Summary was only written to file.");
             }
         }
         OutputType::Teams => {
             if teams_webhook_indices.is_empty() {
-                println!("No Teams webhooks selected. Displaying summary in terminal instead.");
+                println!("⚠️ No Teams webhooks selected. Displaying summary in terminal instead.");
                 println!("Summary:\n{}\n", summarized_text);
             } else {
                 output::send_teams_notification(
@@ -536,7 +536,7 @@ async fn main() -> Result<()> {
                 )
                 .await?;
             } else {
-                println!("No Teams webhooks selected. Summary was only written to file.");
+                println!("⚠️ No Teams webhooks selected. Summary was only written to file.");
             }
         }
     }
@@ -563,6 +563,12 @@ async fn main() -> Result<()> {
             .map_err(|e| anyhow::anyhow!("Error writing transcript file: {}", e))?;
             
         println!("📝 Full transcript saved to {}", trans_path.display());
+    }
+
+    if !output::SPINNER_STOPPED.load(std::sync::atomic::Ordering::SeqCst) {
+        spinner.success("Done!");
+    } else {
+        println!("Done!");
     }
 
     Ok(())

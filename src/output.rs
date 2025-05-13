@@ -84,10 +84,10 @@ pub fn write_text_file(summary_file_name: &str, summarized_text: &str, spinner: 
     let outfile = summary_file_name.to_owned() + ext;
     let output_file_path = Path::new(&outfile);
     let mut file = File::create(output_file_path)
-        .map_err(|e| anyhow::anyhow!("Error creating file: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("❌ Error creating file: {}", e))?;
 
     file.write_all(summarized_text.as_bytes())
-        .map_err(|e| anyhow::anyhow!("Error creating file: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("❌ Error creating file: {}", e))?;
 
     // Simply update the spinner with success message
     if !SPINNER_STOPPED.load(Ordering::SeqCst) {
@@ -119,7 +119,7 @@ pub fn write_word_file(summary_file_name: &str, summarized_text: &str, spinner: 
     let outfile = summary_file_name.to_owned() + ext;
     let output_file_path = Path::new(&outfile);
     let file = File::create(output_file_path)
-        .map_err(|e| anyhow::anyhow!("Error creating file: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("❌ Error creating file: {}", e))?;
 
     // Creating a new document and adding paragraphs
     let doc = Docx::new()
@@ -129,7 +129,7 @@ pub fn write_word_file(summary_file_name: &str, summarized_text: &str, spinner: 
     // Building and saving the document
     doc.build()
         .pack(file)
-        .map_err(|e| anyhow::anyhow!("Error writing Word document: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("❌ Error writing Word document: {}", e))?;
 
     if !SPINNER_STOPPED.load(Ordering::SeqCst) {
         spinner.success("Done!");
@@ -160,13 +160,13 @@ pub fn write_markdown_file(summary_file_name: &str, summarized_text: &str, spinn
     let outfile = summary_file_name.to_owned() + ext;
     let output_file_path = Path::new(&outfile);
     let mut file = File::create(output_file_path)
-        .map_err(|e| anyhow::anyhow!("Error creating file: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("❌ Error creating file: {}", e))?;
 
     let summary_md = format!("# Summary\n\n{}", summarized_text);
     let markdown_content = format!("{}", summary_md);
 
     file.write_all(markdown_content.as_bytes())
-        .map_err(|e| anyhow::anyhow!("Error writing Markdown file: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("❌ Error writing Markdown file: {}", e))?;
 
     if !SPINNER_STOPPED.load(Ordering::SeqCst) {
         spinner.success("Done!");
@@ -355,7 +355,7 @@ pub async fn send_slack_notification(
                 } else {
                     let status = response.status();
                     // Update spinner with error message
-                    let error_msg = format!("Error sending to Slack ({}): {}", webhook_name, status);
+                    let error_msg = format!("❌ Error sending to Slack ({}): {}", webhook_name, status);
                     let static_error_msg: &'static str = Box::leak(error_msg.into_boxed_str());
                     spinner.update(spinners::Dots, static_error_msg, Some(Color::Red));
                     failure_count += 1;
@@ -364,7 +364,7 @@ pub async fn send_slack_notification(
             Err(err) => {
                 let err_msg = err.to_string();
                 // Update spinner with error message
-                let error_msg = format!("Error sending to Slack ({}): {}", webhook_name, err_msg);
+                let error_msg = format!("❌ Error sending to Slack ({}): {}", webhook_name, err_msg);
                 let static_error_msg: &'static str = Box::leak(error_msg.into_boxed_str());
                 spinner.update(spinners::Dots, static_error_msg, Some(Color::Red));
                 failure_count += 1;
@@ -648,7 +648,7 @@ pub async fn send_teams_notification(
                 } else {
                     let status = response.status();
                     // Update spinner with error message
-                    let error_msg = format!("Error sending to Teams ({}): {}", webhook_name, status);
+                    let error_msg = format!("❌ Error sending to Teams ({}): {}", webhook_name, status);
                     let static_error_msg: &'static str = Box::leak(error_msg.into_boxed_str());
                     spinner.update(spinners::Dots, static_error_msg, Some(Color::Red));
                     failure_count += 1;
@@ -657,7 +657,7 @@ pub async fn send_teams_notification(
             Err(err) => {
                 let err_msg = err.to_string();
                 // Update spinner with error message
-                let error_msg = format!("Error sending to Teams ({}): {}", webhook_name, err_msg);
+                let error_msg = format!("❌ Error sending to Teams ({}): {}", webhook_name, err_msg);
                 let static_error_msg: &'static str = Box::leak(error_msg.into_boxed_str());
                 spinner.update(spinners::Dots, static_error_msg, Some(Color::Red));
                 failure_count += 1;
