@@ -295,6 +295,19 @@ async fn main() -> Result<()> {
         save_transcript,
     } = Opt::parse();
     
+    // Display input file and output type at the beginning
+    println!("🧙 Welcome to Distill CLI");
+    
+    // Extract just the filename without path
+    let file_path = Path::new(&input_audio_file);
+    let file_name = file_path
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_else(|| input_audio_file.clone());
+    
+    println!("📄 Processing file: {}", file_name);
+    println!("🔄 Output type: {:?}", output_type);
+    
     // Load AWS config
     let config = aws_utils::load_config(None).await;
     
@@ -311,7 +324,6 @@ async fn main() -> Result<()> {
 
     let s3_client = Client::new(&config);
 
-    println!("🧙 Welcome to Distill CLI");
     println!("📦 Using model: {}", model_id);
 
     // Select or validate S3 bucket
