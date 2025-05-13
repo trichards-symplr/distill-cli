@@ -368,21 +368,24 @@ async fn main() -> Result<()> {
     // Load the bucket region and create a new client to use that region
     let region = aws_utils::bucket_region(&s3_client, &bucket_name).await?;
     println!();
+    
     let region_message = format!("Using bucket region {}", region);
     let static_region_message: &'static str = Box::leak(region_message.into_boxed_str());
     spinner.update(spinners::Dots, static_region_message, Some(Color::White));
+
     let regional_config = aws_utils::load_config(Some(region)).await;
     let regional_s3_client = Client::new(&regional_config);
 
     // Handle conversion of relative paths to absolute paths
     let file_path = Path::new(&input_audio_file);
-    let file_name = file_path
-        .file_name()
-        .unwrap()
-        .to_string_lossy()
-        .into_owned();
+    
+    // let file_name = file_path
+    //     .file_name()
+    //     .unwrap()
+    //     .to_string_lossy()
+    //     .into_owned();
 
-    println!();
+    // println!();
     // let audio_message = format!("Audio File: {}", file_name);
     // let static_audio_message: &'static str = Box::leak(audio_message.into_boxed_str());
     // spinner.update(spinners::Dots, static_audio_message, Some(Color::White));
