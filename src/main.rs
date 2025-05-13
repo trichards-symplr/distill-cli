@@ -383,13 +383,13 @@ async fn main() -> Result<()> {
     let absolute_path = Path::new(&absolute_path);
 
     if !absolute_path.exists() {
-        bail!("\nThe path {} does not exist.", absolute_path.display());
+        bail!("\n❌ The path {} does not exist.", absolute_path.display());
     }
 
     let canonicalized_path = absolute_path.canonicalize()?;
     let body = ByteStream::from_path(&canonicalized_path)
         .await
-        .with_context(|| format!("Error loading file: {}", canonicalized_path.display()))?;
+        .with_context(|| format!("❌ Error loading file: {}", canonicalized_path.display()))?;
 
     let _upload_result = regional_s3_client
         .put_object()
@@ -399,7 +399,7 @@ async fn main() -> Result<()> {
         .server_side_encryption(aws_sdk_s3::types::ServerSideEncryption::Aes256)
         .send()
         .await
-        .context("Failed to upload to S3")?;
+        .context("❌ Failed to upload to S3")?;
 
     let s3_uri = format!("s3://{}/{}", bucket_name, file_name);
 
@@ -459,10 +459,10 @@ async fn main() -> Result<()> {
             let outfile = summary_file_name.clone() + ext;
             let output_file_path_txt = Path::new(&outfile);
             let mut file = File::create(output_file_path_txt)
-                .map_err(|e| anyhow::anyhow!("Error creating file: {}", e))?;
+                .map_err(|e| anyhow::anyhow!("❌ Error creating file: {}", e))?;
 
             file.write_all(summarized_text.as_bytes())
-                .map_err(|e| anyhow::anyhow!("Error creating file: {}", e))?;
+                .map_err(|e| anyhow::anyhow!("❌ Error creating file: {}", e))?;
 
             println!("\n💾 Summary written to {}", output_file_path_txt.display());
             
@@ -505,10 +505,10 @@ async fn main() -> Result<()> {
             let outfile = summary_file_name.clone() + ext;
             let output_file_path_txt = Path::new(&outfile);
             let mut file = File::create(output_file_path_txt)
-                .map_err(|e| anyhow::anyhow!("Error creating file: {}", e))?;
+                .map_err(|e| anyhow::anyhow!("❌ Error creating file: {}", e))?;
 
             file.write_all(summarized_text.as_bytes())
-                .map_err(|e| anyhow::anyhow!("Error creating file: {}", e))?;
+                .map_err(|e| anyhow::anyhow!("❌ Error creating file: {}", e))?;
 
             println!("\n💾 Summary written to {}", output_file_path_txt.display());
             
@@ -549,10 +549,10 @@ async fn main() -> Result<()> {
         let trans_file = summary_file_name.clone() + trans_ext;
         let trans_path = Path::new(&trans_file);
         let mut trans_file = File::create(trans_path)
-            .map_err(|e| anyhow::anyhow!("Error creating transcript file: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("❌ Error creating transcript file: {}", e))?;
             
         trans_file.write_all(transcription.as_bytes())
-            .map_err(|e| anyhow::anyhow!("Error writing transcript file: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("❌ Error writing transcript file: {}", e))?;
             
         println!("📝 Full transcript saved to {}", trans_path.display());
     }
