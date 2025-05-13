@@ -378,17 +378,6 @@ async fn main() -> Result<()> {
 
     // Handle conversion of relative paths to absolute paths
     let file_path = Path::new(&input_audio_file);
-    
-    // let file_name = file_path
-    //     .file_name()
-    //     .unwrap()
-    //     .to_string_lossy()
-    //     .into_owned();
-
-    // println!();
-    // let audio_message = format!("Audio File: {}", file_name);
-    // let static_audio_message: &'static str = Box::leak(audio_message.into_boxed_str());
-    // spinner.update(spinners::Dots, static_audio_message, Some(Color::White));
 
     let absolute_path = shellexpand::tilde(file_path.to_str().unwrap()).to_string();
     let absolute_path = Path::new(&absolute_path);
