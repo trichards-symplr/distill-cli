@@ -4,6 +4,7 @@ participant "summarize_text()" as Sum
 participant "Config" as Conf
 participant "Bedrock Client" as Client
 participant "AWS Bedrock" as Bedrock
+participant "Spinner" as Spinner
 
 Caller -> Sum: summarize_text(config, text, spinner)
 activate Sum

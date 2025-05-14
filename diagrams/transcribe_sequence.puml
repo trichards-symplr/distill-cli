@@ -5,6 +5,7 @@ participant "AWS Transcribe\nClient" as Client
 participant "MediaFormat\nDetector" as Format
 participant "AWS Transcribe\nService" as AWS
 participant "Spinner" as Spin
+participant "SPINNER_STOPPED" as Flag
 
 Caller -> Trans: transcribe_audio(config, file_path, s3_uri, spinner, language_code)
 activate Trans
@@ -14,7 +15,7 @@ activate Client
 Client --> Trans: client
 deactivate Client
 
-Trans -> Spin: update(spinners::Dots7, "Submitting transcription job")
+Trans -> Spin: update(spinners::Dots7, "Submitting transcription job", None)
 activate Spin
 Spin --> Trans
 deactivate Spin
@@ -38,11 +39,14 @@ Trans -> Trans: map language_code to LanguageCode enum
 Trans -> Client: start_transcription_job()
 activate Client
 Client -> AWS: Submit job
+activate AWS
 AWS --> Client: job details
+deactivate AWS
 Client --> Trans: job response
 deactivate Client
 
-Trans -> Spin: update("Waiting for transcription...")
+Trans -> Trans: println!()
+Trans -> Spin: update(spinners::Dots7, "Waiting for transcription to complete...", None)
 activate Spin
 Spin --> Trans
 deactivate Spin
@@ -51,12 +55,15 @@ loop Job Status Check
     Trans -> Client: get_transcription_job()
     activate Client
     Client -> AWS: Check status
+    activate AWS
     AWS --> Client: current status
+    deactivate AWS
     Client --> Trans: job details
     deactivate Client
 
     alt #LightBlue Job Status == InProgress
         Trans -> Trans: sleep(poll_interval)
+        Trans -> Trans: println!()
         Trans -> Trans: increase poll_interval
     else #LightGreen Job Status == Completed
         Trans -> Trans: exit loop
@@ -67,13 +74,23 @@ end
 
 alt #LightGreen Job Completed
     Trans -> Trans: fetch transcript URI
-    Trans -> Trans: download transcript
-    Trans -> Trans: convert_transcribe_json()
-    Trans --> Caller: Ok(final_transcript)
+    alt #WhiteSmoke URI exists
+        Trans -> Spin: update(spinners::Dots7, "Transcription job complete", None)
+        activate Spin
+        Spin --> Trans
+        deactivate Spin
+        Trans -> Trans: download transcript
+        Trans -> Trans: convert_transcribe_json()
+        Trans --> Caller: Ok(final_transcript)
+    else #MistyRose URI missing
+        Trans -> Trans: println!("Transcript file URI is missing.")
+        Trans --> Caller: Ok("Transcript file URI is missing.")
+    end
 else #Pink Job Failed
-    Trans --> Caller: Error with failure reason
+    Trans -> Trans: println!("Transcription job failed: {reason}")
+    Trans --> Caller: Ok("Transcription job failed.")
 else #Yellow Unexpected Status
-    Trans --> Caller: Error with status message
+    Trans --> Caller: Ok("Job ended with an unexpected status...")
 end
 
 deactivate Trans

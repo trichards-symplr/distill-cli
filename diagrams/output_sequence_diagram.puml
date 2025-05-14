@@ -9,6 +9,14 @@ participant "Slack API" as Slack
 participant "Teams API" as Teams
 participant "Timezone" as TZ
 
+== Initialization ==
+
+Main -> Out: reset_spinner_flag()
+activate Out
+Out -> Out: SPINNER_STOPPED.store(false)
+Out --> Main: flag reset
+deactivate Out
+
 == File Output Functions ==
 
 group #LightBlue write_text_file
@@ -26,10 +34,14 @@ group #LightBlue write_text_file
     FS --> Out: write result
     deactivate FS
     
-    Out -> Spin: spinner.success("Done!")
-    activate Spin
-    Spin --> Out: spinner stopped
-    deactivate Spin
+    Out -> Out: check SPINNER_STOPPED flag
+    alt #WhiteSmoke flag is false
+        Out -> Spin: spinner.success("Done!")
+        activate Spin
+        Spin --> Out: spinner stopped
+        deactivate Spin
+        Out -> Out: SPINNER_STOPPED.store(true)
+    end
     
     Out -> Main: display success message
     Out --> Main: Ok(())
@@ -54,10 +66,14 @@ group #LightGreen write_word_file
     FS --> Out: write result
     deactivate FS
     
-    Out -> Spin: spinner.success("Done!")
-    activate Spin
-    Spin --> Out: spinner stopped
-    deactivate Spin
+    Out -> Out: check SPINNER_STOPPED flag
+    alt #WhiteSmoke flag is false
+        Out -> Spin: spinner.success("Done!")
+        activate Spin
+        Spin --> Out: spinner stopped
+        deactivate Spin
+        Out -> Out: SPINNER_STOPPED.store(true)
+    end
     
     Out -> Main: display success message
     Out --> Main: Ok(())
@@ -81,10 +97,14 @@ group #LightYellow write_markdown_file
     FS --> Out: write result
     deactivate FS
     
-    Out -> Spin: spinner.success("Done!")
-    activate Spin
-    Spin --> Out: spinner stopped
-    deactivate Spin
+    Out -> Out: check SPINNER_STOPPED flag
+    alt #WhiteSmoke flag is false
+        Out -> Spin: spinner.success("Done!")
+        activate Spin
+        Spin --> Out: spinner stopped
+        deactivate Spin
+        Out -> Out: SPINNER_STOPPED.store(true)
+    end
     
     Out -> Main: display success message
     Out --> Main: Ok(())
@@ -94,49 +114,138 @@ end
 == Notification Functions ==
 
 group #LightCoral send_slack_notification
-    Main -> Out: send_slack_notification(settings, spinner, summarized_text)
+    Main -> Out: send_slack_notification(settings, spinner, summarized_text, webhook_indices)
     activate Out
     
     Out -> Out: create ReqwestClient
-    Out -> Out: get slack_webhook_endpoint from settings
+    Out -> Out: get webhooks from settings
     
-    alt #WhiteSmoke webhook endpoint is empty
-        Out -> Spin: spinner.stop_and_persist("⚠️", "Slack webhook endpoint is not configured...")
-        activate Spin
-        Spin --> Out: spinner stopped
-        deactivate Spin
-        Out -> Main: print summary to console
-        Out --> Main: Ok(())
-    else #AliceBlue webhook endpoint exists
-        Out -> Out: format content and create payload
+    alt #WhiteSmoke single webhook configuration
+        Out -> Out: get slack_webhook_endpoint
         
-        Out -> Slack: client.post(slack_webhook_endpoint).send()
-        activate Slack
-        
-        alt #PaleGreen successful response
-            Slack --> Out: success response
-            Out -> Spin: spinner.success("Summary sent to Slack!")
+        alt #PaleGreen webhook endpoint is empty
+            Out -> Out: check SPINNER_STOPPED flag
+            alt #WhiteSmoke flag is false
+                Out -> Spin: spinner.stop_and_persist("⚠️", "Slack webhook endpoint is not configured...")
+                activate Spin
+                Spin --> Out: spinner stopped
+                deactivate Spin
+                Out -> Out: SPINNER_STOPPED.store(true)
+            end
+            Out -> Main: print summary to console
+            Out --> Main: Ok(())
+        else #AliceBlue webhook endpoint exists
+            Out -> Spin: spinner.update("Sending to Slack")
             activate Spin
-            Spin --> Out: spinner stopped
+            Spin --> Out: spinner updated
             deactivate Spin
-        else #MistyRose error response
-            Slack --> Out: error response
-            Out -> Main: print error message
-            Out -> Spin: spinner.stop_and_persist("❌", "Failed to send summary to Slack!")
-            activate Spin
-            Spin --> Out: spinner stopped
-            deactivate Spin
+            
+            Out -> Out: format content and create payload
+            
+            Out -> Slack: client.post(slack_webhook_endpoint).send()
+            activate Slack
+            
+            alt #PaleGreen successful response
+                Slack --> Out: success response
+                Out -> Out: check SPINNER_STOPPED flag
+                alt #WhiteSmoke flag is false
+                    Out -> Spin: spinner.success("Summary sent to Slack!")
+                    activate Spin
+                    Spin --> Out: spinner stopped
+                    deactivate Spin
+                    Out -> Out: SPINNER_STOPPED.store(true)
+                end
+            else #MistyRose error response
+                Slack --> Out: error response
+                Out -> Main: print error message
+                Out -> Out: check SPINNER_STOPPED flag
+                alt #WhiteSmoke flag is false
+                    Out -> Spin: spinner.stop_and_persist("❌", "Failed to send summary to Slack!")
+                    activate Spin
+                    Spin --> Out: spinner stopped
+                    deactivate Spin
+                    Out -> Out: SPINNER_STOPPED.store(true)
+                end
+            end
+            
+            deactivate Slack
         end
-        
-        deactivate Slack
-        Out --> Main: Ok(())
+    else #LightCyan multiple webhooks configuration
+        alt #PaleGreen webhooks empty or no indices selected
+            Out -> Out: check SPINNER_STOPPED flag
+            alt #WhiteSmoke flag is false
+                Out -> Spin: spinner.stop_and_persist("⚠️", "No Slack webhooks selected...")
+                activate Spin
+                Spin --> Out: spinner stopped
+                deactivate Spin
+                Out -> Out: SPINNER_STOPPED.store(true)
+            end
+            Out -> Main: print summary to console
+            Out --> Main: Ok(())
+        else #AliceBlue webhooks available
+            Out -> Out: format content and create payload
+            Out -> Spin: spinner.update("Processing webhooks...")
+            activate Spin
+            Spin --> Out: spinner updated
+            deactivate Spin
+            
+            loop #LightGray for each selected webhook
+                Out -> Spin: spinner.update("Sending to Slack (webhook_name)")
+                activate Spin
+                Spin --> Out: spinner updated
+                deactivate Spin
+                
+                Out -> Slack: client.post(endpoint).send()
+                activate Slack
+                
+                alt #PaleGreen successful response
+                    Slack --> Out: success response
+                    Out -> Out: increment success_count
+                    Out -> Spin: spinner.update("Successfully sent to Slack (webhook_name)")
+                    activate Spin
+                    Spin --> Out: spinner updated
+                    deactivate Spin
+                else #MistyRose error response
+                    Slack --> Out: error response
+                    Out -> Out: increment failure_count
+                    Out -> Spin: spinner.update("Error sending to Slack (webhook_name)")
+                    activate Spin
+                    Spin --> Out: spinner updated
+                    deactivate Spin
+                end
+                
+                deactivate Slack
+            end
+            
+            Out -> Out: check SPINNER_STOPPED flag
+            alt #WhiteSmoke flag is false
+                alt #PaleGreen all successful
+                    Out -> Spin: spinner.success("Summary sent to N Slack webhooks")
+                    activate Spin
+                    Spin --> Out: spinner stopped
+                    deactivate Spin
+                else #MistyRose partial success
+                    Out -> Spin: spinner.stop_and_persist("⚠️", "Sent to X webhooks, failed to send to Y webhooks")
+                    activate Spin
+                    Spin --> Out: spinner stopped
+                    deactivate Spin
+                else #LightCoral all failed
+                    Out -> Spin: spinner.stop_and_persist("❌", "Failed to send summary to any Slack webhooks!")
+                    activate Spin
+                    Spin --> Out: spinner stopped
+                    deactivate Spin
+                end
+                Out -> Out: SPINNER_STOPPED.store(true)
+            end
+        end
     end
     
+    Out --> Main: Ok(())
     deactivate Out
 end
 
 group #LightSkyBlue send_teams_notification
-    Main -> Out: send_teams_notification(settings, spinner, summarized_text, user_input, success_message)
+    Main -> Out: send_teams_notification(settings, spinner, summarized_text, user_input, success_message, webhook_indices)
     activate Out
     
     Out -> Out: create ReqwestClient
@@ -147,40 +256,129 @@ group #LightSkyBlue send_teams_notification
     deactivate TZ
     
     Out -> Out: format date header
-    Out -> Out: get teams_webhook_endpoint from settings
+    Out -> Out: get webhooks from settings
     
-    alt #WhiteSmoke webhook endpoint is empty
-        Out -> Spin: spinner.stop_and_persist("⚠️", "Teams webhook endpoint is not configured...")
-        activate Spin
-        Spin --> Out: spinner stopped
-        deactivate Spin
-        Out -> Main: print summary to console
-        Out --> Main: Ok(())
-    else #AliceBlue webhook endpoint exists
-        Out -> Out: create adaptive card payload
+    alt #WhiteSmoke single webhook configuration
+        Out -> Out: get teams_webhook_endpoint
         
-        Out -> Teams: client.post(teams_webhook_endpoint).send()
-        activate Teams
-        
-        alt #PaleGreen successful response
-            Teams --> Out: success response
-            Out -> Spin: spinner.success(success_message)
+        alt #PaleGreen webhook endpoint is empty
+            Out -> Out: check SPINNER_STOPPED flag
+            alt #WhiteSmoke flag is false
+                Out -> Spin: spinner.stop_and_persist("⚠️", "Teams webhook endpoint is not configured...")
+                activate Spin
+                Spin --> Out: spinner stopped
+                deactivate Spin
+                Out -> Out: SPINNER_STOPPED.store(true)
+            end
+            Out -> Main: print summary to console
+            Out --> Main: Ok(())
+        else #AliceBlue webhook endpoint exists
+            Out -> Spin: spinner.update("Sending to Teams")
             activate Spin
-            Spin --> Out: spinner stopped
+            Spin --> Out: spinner updated
             deactivate Spin
-        else #MistyRose error response
-            Teams --> Out: error response
-            Out -> Main: print error message
-            Out -> Spin: spinner.stop_and_persist("❌", "Failed to send summary to Teams!")
-            activate Spin
-            Spin --> Out: spinner stopped
-            deactivate Spin
+            
+            Out -> Out: create adaptive card payload
+            
+            Out -> Teams: client.post(teams_webhook_endpoint).send()
+            activate Teams
+            
+            alt #PaleGreen successful response
+                Teams --> Out: success response
+                Out -> Out: check SPINNER_STOPPED flag
+                alt #WhiteSmoke flag is false
+                    Out -> Spin: spinner.success(success_message)
+                    activate Spin
+                    Spin --> Out: spinner stopped
+                    deactivate Spin
+                    Out -> Out: SPINNER_STOPPED.store(true)
+                end
+            else #MistyRose error response
+                Teams --> Out: error response
+                Out -> Main: print error message
+                Out -> Out: check SPINNER_STOPPED flag
+                alt #WhiteSmoke flag is false
+                    Out -> Spin: spinner.stop_and_persist("❌", "Failed to send summary to Teams!")
+                    activate Spin
+                    Spin --> Out: spinner stopped
+                    deactivate Spin
+                    Out -> Out: SPINNER_STOPPED.store(true)
+                end
+            end
+            
+            deactivate Teams
         end
-        
-        deactivate Teams
-        Out --> Main: Ok(())
+    else #LightCyan multiple webhooks configuration
+        alt #PaleGreen webhooks empty or no indices selected
+            Out -> Out: check SPINNER_STOPPED flag
+            alt #WhiteSmoke flag is false
+                Out -> Spin: spinner.stop_and_persist("⚠️", "No Teams webhooks selected...")
+                activate Spin
+                Spin --> Out: spinner stopped
+                deactivate Spin
+                Out -> Out: SPINNER_STOPPED.store(true)
+            end
+            Out -> Main: print summary to console
+            Out --> Main: Ok(())
+        else #AliceBlue webhooks available
+            Out -> Out: create adaptive card payload
+            Out -> Spin: spinner.update("Processing webhooks...")
+            activate Spin
+            Spin --> Out: spinner updated
+            deactivate Spin
+            
+            loop #LightGray for each selected webhook
+                Out -> Spin: spinner.update("Sending to Teams (webhook_name)")
+                activate Spin
+                Spin --> Out: spinner updated
+                deactivate Spin
+                
+                Out -> Teams: client.post(endpoint).send()
+                activate Teams
+                
+                alt #PaleGreen successful response
+                    Teams --> Out: success response
+                    Out -> Out: increment success_count
+                    Out -> Spin: spinner.update("Successfully sent to Teams (webhook_name)")
+                    activate Spin
+                    Spin --> Out: spinner updated
+                    deactivate Spin
+                else #MistyRose error response
+                    Teams --> Out: error response
+                    Out -> Out: increment failure_count
+                    Out -> Spin: spinner.update("Error sending to Teams (webhook_name)")
+                    activate Spin
+                    Spin --> Out: spinner updated
+                    deactivate Spin
+                end
+                
+                deactivate Teams
+            end
+            
+            Out -> Out: check SPINNER_STOPPED flag
+            alt #WhiteSmoke flag is false
+                alt #PaleGreen all successful
+                    Out -> Spin: spinner.success("Summary sent to N Teams webhooks")
+                    activate Spin
+                    Spin --> Out: spinner stopped
+                    deactivate Spin
+                else #MistyRose partial success
+                    Out -> Spin: spinner.stop_and_persist("⚠️", "Sent to X webhooks, failed to send to Y webhooks")
+                    activate Spin
+                    Spin --> Out: spinner stopped
+                    deactivate Spin
+                else #LightCoral all failed
+                    Out -> Spin: spinner.stop_and_persist("❌", "Failed to send summary to any Teams webhooks!")
+                    activate Spin
+                    Spin --> Out: spinner stopped
+                    deactivate Spin
+                end
+                Out -> Out: SPINNER_STOPPED.store(true)
+            end
+        end
     end
     
+    Out --> Main: Ok(())
     deactivate Out
 end
 

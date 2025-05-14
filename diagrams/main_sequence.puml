@@ -15,6 +15,20 @@ participant "Teams" as Teams
 User -> Main: Run with input_audio_file
 activate Main
 
+Main -> Out: reset_spinner_flag()
+activate Out
+Out --> Main: flag reset
+deactivate Out
+
+Main -> Main: Parse command-line arguments
+Main -> Main: Display file name and output type
+
+Main -> AWS: load_config(None)
+activate AWS
+AWS --> Main: config
+deactivate AWS
+
+Main -> Main: load_settings()
 Main -> AWS: list_buckets()
 activate AWS
 AWS -> AWS_S3: ListBuckets
@@ -37,6 +51,11 @@ deactivate Main
 alt #LightBlue Teams output type
     Main -> Main: get_teams_card_title()
     User --> Main: enter card title
+end
+
+alt #LightCyan Slack or Teams output
+    Main -> Main: select_webhooks()
+    User --> Main: select webhooks
 end
 
 Main -> AWS: bucket_region()
@@ -74,19 +93,7 @@ activate Sum
 Sum --> Main: summary text
 deactivate Sum
 
-alt #Gold save_transcript is true
-    Main -> File: create transcript file (.trans)
-    activate File
-    File --> Main: file handle
-    deactivate File
-    Main -> File: write transcription
-    activate File
-    File --> Main: write result
-    deactivate File
-    Main -> Main: display transcript saved message
-end
-
-alt #LightBlue OutputType::Word
+alt #Gold OutputType::Word
     Main -> Out: write_word_file()
     activate Out
     Out -> File: create file
@@ -126,16 +133,18 @@ else #LightYellow OutputType::Markdown
     Out --> Main: .md file created
     deactivate Out
 else #LightPink OutputType::Terminal
+    Main -> Main: check SPINNER_STOPPED flag
+    Main -> Main: stop spinner if not stopped
     Main -> Main: print to console
 else #LightCyan OutputType::Slack
     Main -> Out: send_slack_notification()
     activate Out
-    alt #White slack webhook configured
+    alt #White slack webhook indices not empty
         Out -> Slack: post summary
         activate Slack
         Slack --> Out: response
         deactivate Slack
-    else #WhiteSmoke no webhook
+    else #WhiteSmoke no webhooks selected
         Out -> Out: display warning
         Out -> Out: print summary to console
     end
@@ -148,21 +157,23 @@ else #LightSalmon OutputType::SlackSplit
     deactivate File
     Main -> Out: send_slack_notification()
     activate Out
-    Out -> Slack: post summary
-    activate Slack
-    Slack --> Out: response
-    deactivate Slack
+    alt #White slack webhook indices not empty
+        Out -> Slack: post summary
+        activate Slack
+        Slack --> Out: response
+        deactivate Slack
+    end
     Out --> Main: notification result
     deactivate Out
 else #LightSkyBlue OutputType::Teams
     Main -> Out: send_teams_notification()
     activate Out
-    alt #White teams webhook configured
+    alt #White teams webhook indices not empty
         Out -> Teams: post adaptive card
         activate Teams
         Teams --> Out: response
         deactivate Teams
-    else #WhiteSmoke no webhook
+    else #WhiteSmoke no webhooks selected
         Out -> Out: display warning
         Out -> Out: print summary to console
     end
@@ -175,10 +186,12 @@ else #LightSeaGreen OutputType::TeamsSplit
     deactivate File
     Main -> Out: send_teams_notification()
     activate Out
-    Out -> Teams: post adaptive card
-    activate Teams
-    Teams --> Out: response
-    deactivate Teams
+    alt #White teams webhook indices not empty
+        Out -> Teams: post adaptive card
+        activate Teams
+        Teams --> Out: response
+        deactivate Teams
+    end
     Out --> Main: notification result
     deactivate Out
 end
@@ -188,6 +201,18 @@ alt #LightGray delete_s3_object == "Y"
     activate AWS_S3
     AWS_S3 --> Main: deletion result
     deactivate AWS_S3
+end
+
+alt #Gold save_transcript is true
+    Main -> File: create transcript file (.trans)
+    activate File
+    File --> Main: file handle
+    deactivate File
+    Main -> File: write transcription
+    activate File
+    File --> Main: write result
+    deactivate File
+    Main -> Main: display transcript saved message
 end
 
 Main --> User: Processing complete

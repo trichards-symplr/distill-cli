@@ -22,6 +22,9 @@ enum OutputType {
 
 class Main {
   - get_teams_card_title(): String
+  - select_webhooks(settings: &Config, service: &str): Result<Vec<usize>>
+  - select_slack_webhooks(settings: &Config): Result<Vec<usize>>
+  - select_teams_webhooks(settings: &Config): Result<Vec<usize>>
   - select_bucket(s3_client: &Client, s3_bucket_name: &str): Result<String>
   - load_settings(): Result<Config>
   + main(): Result<()>
@@ -42,11 +45,13 @@ class Summarize {
 }
 
 class Output {
+  + static SPINNER_STOPPED: AtomicBool
+  + reset_spinner_flag(): void
   + write_text_file(summary_file_name: &str, summarized_text: &str, spinner: &mut Spinner): Result<()>
   + write_word_file(summary_file_name: &str, summarized_text: &str, spinner: &mut Spinner): Result<()>
   + write_markdown_file(summary_file_name: &str, summarized_text: &str, spinner: &mut Spinner): Result<()>
-  + send_slack_notification(settings: &Config, spinner: &mut Spinner, summarized_text: &str): Result<()>
-  + send_teams_notification(settings: &Config, spinner: &mut Spinner, summarized_text: &str, user_input: &str, success_message: &str): Result<()>
+  + send_slack_notification(settings: &Config, spinner: &mut Spinner, summarized_text: &str, webhook_indices: &[usize]): Result<()>
+  + send_teams_notification(settings: &Config, spinner: &mut Spinner, summarized_text: &str, user_input: &str, success_message: &str, webhook_indices: &[usize]): Result<()>
 }
 
 Main --> Opt : uses

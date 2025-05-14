@@ -18,7 +18,7 @@ The `aws_utils_sequence_diagram.puml` file illustrates the interactions between 
 
 ### Transcribe Sequence
 
-The `transcrribe_sequence.puml` file shows the sequence of operations for audio transcription using Amazon Transcribe, including job creation, monitoring, and result processing.
+The `transcribe_sequence.puml` file shows the sequence of operations for audio transcription using Amazon Transcribe, including job creation, monitoring, and result processing.
 
 ### Summarize Sequence
 
