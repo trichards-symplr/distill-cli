@@ -312,7 +312,7 @@ color = "Accent"
 #### Icon Settings
 
 - **name**: The name of the icon to display. 
-  - Possible values: Any icon name from the [Microsoft Adaptive Cards Icon Set](hhttps://fluent2.microsoft.design/iconography), such as "Flash", "Star", "Bookmark", "Calendar", "CheckMark", "Contact", "Document", "Download", etc.
+  - Possible values: Any icon name from the [Microsoft Adaptive Cards Icon Set](https://fluent2.microsoft.design/iconography), such as "Flash", "Star", "Bookmark", "Calendar", "CheckMark", "Contact", "Document", "Download", etc.
 
 - **size**: The size of the icon.
   - Possible values: "Small", "Medium", "Large", "ExtraLarge"
