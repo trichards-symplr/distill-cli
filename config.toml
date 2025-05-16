@@ -74,3 +74,10 @@ beta = "output-128k-2025-02-19"
 #   { name = "Project Team", endpoint = "https://prod-33.westus.logic.azure.com:443/workflows/..." },
 #   { name = "Management", endpoint = "https://prod-33.westus.logic.azure.com:443/workflows/..." }
 # ]
+
+# Teams card icon settings
+[teams.icon]
+#name = "Flash"
+#size = "Large"
+#style = "Filled"
+#color = "Accent"

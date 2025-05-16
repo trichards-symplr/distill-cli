@@ -436,6 +436,23 @@ pub async fn send_teams_notification(
         .time_zone_designation();
     let date_header = format!("Date: {} {}", formatted_date, tz_name);
 
+    // Get icon settings from config with defaults
+    let icon_name = settings
+        .get_string("teams.icon.name")
+        .unwrap_or_else(|_| "Flash".to_string());
+    
+    let icon_size = settings
+        .get_string("teams.icon.size")
+        .unwrap_or_else(|_| "Large".to_string());
+    
+    let icon_style = settings
+        .get_string("teams.icon.style")
+        .unwrap_or_else(|_| "Filled".to_string());
+    
+    let icon_color = settings
+        .get_string("teams.icon.color")
+        .unwrap_or_else(|_| "Accent".to_string());
+
     // Create the adaptive card payload
     let text = format!("{}", summarized_text);
     let payload = json!({
@@ -460,10 +477,10 @@ pub async fn send_teams_notification(
                                 "items": [
                                     {
                                         "type": "Icon",
-                                        "name": "Flash",
-                                        "size": "Large",
-                                        "style": "Filled",
-                                        "color": "Accent"
+                                        "name": icon_name,
+                                        "size": icon_size,
+                                        "style": icon_style,
+                                        "color": icon_color
                                     },
                                 ],
                                 "width": "auto"

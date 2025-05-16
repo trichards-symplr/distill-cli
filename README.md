@@ -18,6 +18,7 @@ Distill CLI is a tool for transcribing and summarizing audio files using AWS ser
   - [How to adjust model values](#how-to-adjust-model-values)
   - [Supported Bedrock models](#supported-bedrock-models)
   - [Configuring Webhook Endpoints](#configuring-webhook-endpoints)
+  - [Teams Card Customization](#teams-card-customization)
 - [Automation](#automation)
 - [Security](#security)
 - [License](#license)
@@ -295,6 +296,34 @@ Use the arrow keys to navigate, space to toggle selection, and enter to confirm.
 
 - **For Slack**: Create a [Slack webhook](https://api.slack.com/messaging/webhooks) by setting up an incoming webhook app in your Slack workspace.
 - **For Teams**: Create a Teams webhook by setting up a workflow in Microsoft Teams that will post to a chat or channel.
+
+### Teams Card Customization
+
+You can customize the appearance of the Teams adaptive card by configuring the icon settings in the `config.toml` file:
+
+```toml
+[teams.icon]
+name = "Flash"
+size = "Large"
+style = "Filled"
+color = "Accent"
+```
+
+#### Icon Settings
+
+- **name**: The name of the icon to display. 
+  - Possible values: Any icon name from the [Microsoft Adaptive Cards Icon Set](https://adaptivecards.io/explorer/Action.OpenUrl.html), such as "Flash", "Star", "Bookmark", "Calendar", "CheckMark", "Contact", "Document", "Download", etc.
+
+- **size**: The size of the icon.
+  - Possible values: "Small", "Medium", "Large", "ExtraLarge"
+
+- **style**: The style of the icon.
+  - Possible values: "Default", "Filled", "Outline"
+
+- **color**: The color of the icon.
+  - Possible values: "Default", "Accent", "Good", "Warning", "Attention", or any valid HTML color code
+
+For more information about Adaptive Cards in Microsoft Teams, refer to the [Microsoft Adaptive Cards documentation](https://learn.microsoft.com/en-us/adaptive-cards/).
 
 ## Automation
 
