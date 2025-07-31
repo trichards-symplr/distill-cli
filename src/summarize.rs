@@ -112,11 +112,23 @@ pub async fn summarize_text(
             let response_body = from_utf8(output.body.as_ref()).unwrap_or("");
             let response_json: serde_json::Value = serde_json::from_str(response_body).unwrap();
 
-            let summarization = response_json["content"][0]["text"]
+            let raw_response = response_json["content"][0]["text"]
                 .as_str()
                 .unwrap()
                 .replace("\\n", "\n");
-            Ok(summarization.to_string())
+            
+            // Extract only the summary part, removing any transcript that might be included
+            let summarization = if raw_response.contains("Summary:") {
+                // If the response contains "Summary:", extract everything after it
+                raw_response.split("Summary:").nth(1)
+                    .unwrap_or(&raw_response)
+                    .trim()
+                    .to_string()
+            } else {
+                raw_response.trim().to_string()
+            };
+            
+            Ok(summarization)
         }
         Err(e) => Err(anyhow!(e)),
     }
